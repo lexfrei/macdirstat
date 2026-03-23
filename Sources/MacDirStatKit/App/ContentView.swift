@@ -46,6 +46,23 @@ public struct ContentView: View {
                         : "Watch for filesystem changes")
             }
         }
+        .confirmationDialog(
+            "Move to Trash?",
+            isPresented: $appState.showDeleteConfirmation
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                appState.confirmDelete()
+            }
+            Button("Cancel", role: .cancel) {
+                appState.cancelDelete()
+            }
+        } message: {
+            let count = appState.nodesToDelete.count
+            let totalSize = appState.nodesToDelete.reduce(0 as Int64) { $0 + $1.subtreeSize }
+            Text(
+                "\(count) item\(count == 1 ? "" : "s") (\(SizeFormatter.format(totalSize))) will be moved to Trash."
+            )
+        }
         .fileImporter(
             isPresented: $appState.isPickerPresented,
             allowedContentTypes: [.folder]

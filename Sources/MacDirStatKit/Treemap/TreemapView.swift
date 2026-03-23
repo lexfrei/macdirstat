@@ -67,6 +67,10 @@ public struct TreemapView: View {
                             appState.drillDown(into: node)
                         }
                     }
+                    Divider()
+                    Button("Move to Trash", role: .destructive) {
+                        appState.requestDelete(nodes: [node])
+                    }
                 }
             }
             .focusable()

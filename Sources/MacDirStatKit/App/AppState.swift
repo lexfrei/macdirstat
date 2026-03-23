@@ -75,6 +75,37 @@ public final class AppState {
         selectedNode = nil
     }
 
+    public var showDeleteConfirmation = false
+    public var nodesToDelete: [FileNode] = []
+
+    public func requestDelete(nodes: [FileNode]) {
+        nodesToDelete = nodes
+        showDeleteConfirmation = true
+    }
+
+    public func confirmDelete() {
+        let fm = FileManager.default
+        for node in nodesToDelete {
+            do {
+                try fm.trashItem(at: node.url, resultingItemURL: nil)
+            } catch {
+                scanError = "Failed to trash \(node.name): \(error.localizedDescription)"
+                break
+            }
+        }
+        nodesToDelete = []
+        showDeleteConfirmation = false
+
+        if let url = selectedURL {
+            rescan(url: url)
+        }
+    }
+
+    public func cancelDelete() {
+        nodesToDelete = []
+        showDeleteConfirmation = false
+    }
+
     public func navigateUp() {
         guard !navigationStack.isEmpty else { return }
         navigationStack.removeLast()
