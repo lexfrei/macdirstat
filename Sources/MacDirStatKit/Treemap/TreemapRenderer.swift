@@ -4,15 +4,18 @@ public struct TreemapRenderer {
     public let lod: LODController
     public let colorMapper: GoldenAngleColorMapper
     public let layoutAlgorithm: any TreemapLayoutAlgorithm
+    public let maxVisibleRects: Int
 
     public init(
         lod: LODController = LODController(),
         colorMapper: GoldenAngleColorMapper = GoldenAngleColorMapper(),
-        layoutAlgorithm: any TreemapLayoutAlgorithm = SquarifiedTreemapLayout()
+        layoutAlgorithm: any TreemapLayoutAlgorithm = SquarifiedTreemapLayout(),
+        maxVisibleRects: Int = 10_000
     ) {
         self.lod = lod
         self.colorMapper = colorMapper
         self.layoutAlgorithm = layoutAlgorithm
+        self.maxVisibleRects = maxVisibleRects
     }
 
     public func computeLayout(root: FileNode, in rect: CGRect) -> [LayoutRect] {
@@ -24,13 +27,17 @@ public struct TreemapRenderer {
         let topLevel = layoutAlgorithm.layout(items: items, in: rect)
 
         var result: [LayoutRect] = []
+        result.reserveCapacity(min(maxVisibleRects, children.count * 4))
+
         for lr in topLevel {
+            if result.count >= maxVisibleRects { break }
             appendRects(for: lr, depth: 0, into: &result)
         }
         return result
     }
 
     private func appendRects(for lr: LayoutRect, depth: Int, into result: inout [LayoutRect]) {
+        guard result.count < maxVisibleRects else { return }
         guard lod.shouldDraw(rect: lr.frame) else { return }
 
         if lr.node.isDirectory,
@@ -43,6 +50,7 @@ public struct TreemapRenderer {
             }
             let childRects = layoutAlgorithm.layout(items: childItems, in: lr.frame)
             for childLR in childRects {
+                if result.count >= maxVisibleRects { break }
                 appendRects(for: childLR, depth: depth + 1, into: &result)
             }
         } else {
@@ -59,8 +67,6 @@ public struct TreemapRenderer {
         let borderColor = Color.black.opacity(0.2)
 
         for lr in rects {
-            guard lod.shouldDraw(rect: lr.frame) else { continue }
-
             let ext = lr.node.isDirectory ? "" : lr.node.fileExtension
             let fillColor =
                 lr.node.isDirectory

@@ -54,6 +54,9 @@ public final class AppState {
             securityScopedURL = url
         }
 
+        // Pre-trigger TCC dialogs so they appear before scan, not mid-scan
+        Permissions.preTriggerPermissions()
+
         runScan(url: url, releaseSecurityScope: true)
     }
 

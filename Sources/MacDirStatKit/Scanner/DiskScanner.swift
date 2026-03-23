@@ -8,8 +8,12 @@ public protocol FileSystemScanning: Sendable {
     ) async throws -> FileNode
 }
 
+// MARK: - FTS-based fast scanner
+
 public struct FileManagerScanner: FileSystemScanning {
     private let progressIntervalMs: UInt64
+    /// Inode threshold for APFS system volume files (2^62)
+    private static let systemVolumeInodeThreshold: UInt64 = 1 << 62
 
     public init(progressIntervalMs: UInt64 = 100) {
         self.progressIntervalMs = progressIntervalMs
@@ -19,30 +23,27 @@ public struct FileManagerScanner: FileSystemScanning {
         url: URL,
         progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
     ) async throws -> FileNode {
-        let resourceKeys: Set<URLResourceKey> = [
-            .fileSizeKey, .isDirectoryKey, .totalFileAllocatedSizeKey,
-            .isSymbolicLinkKey, .volumeIdentifierKey, .isUbiquitousItemKey,
-            .ubiquitousItemDownloadingStatusKey,
-        ]
+        let path = url.path(percentEncoded: false)
+        let estimatedTotal = Self.estimatedItemCount(at: path)
 
-        let rootVolumeID = try url.resourceValues(forKeys: [.volumeIdentifierKey])
-            .volumeIdentifier as? NSObject
+        // Get root device to stay on same filesystem
+        let rootDevice: dev_t = try {
+            var sb = stat()
+            guard lstat(path, &sb) == 0 else {
+                throw ScanError.cannotAccessPath(path)
+            }
+            return sb.st_dev
+        }()
 
-        let estimatedTotal = Self.estimatedItemCount(
-            at: url.path(percentEncoded: false))
+        await MainActor.run { progressHandler(0, estimatedTotal, "", 0) }
 
         let state = ScanState()
         let intervalNs = progressIntervalMs * 1_000_000
 
-        // Report initial estimate
-        await MainActor.run { progressHandler(0, estimatedTotal, "", 0) }
-
-        let root = try await scanDirectory(
-            url: url, depth: 0, resourceKeys: resourceKeys,
-            rootVolumeID: rootVolumeID, state: state,
-            estimatedTotal: estimatedTotal,
-            progressIntervalNs: intervalNs,
-            progressHandler: progressHandler)
+        let root = try await ftsWalk(
+            path: path, depth: 0, rootDevice: rootDevice,
+            state: state, estimatedTotal: estimatedTotal,
+            progressIntervalNs: intervalNs, progressHandler: progressHandler)
 
         await MainActor.run {
             progressHandler(state.itemCount, estimatedTotal, "", state.skippedDirs)
@@ -50,110 +51,156 @@ public struct FileManagerScanner: FileSystemScanning {
         return root
     }
 
-    /// Get estimated number of used inodes on the volume via statfs.
+    private func ftsWalk(
+        path: String,
+        depth: Int,
+        rootDevice: dev_t,
+        state: ScanState,
+        estimatedTotal: Int,
+        progressIntervalNs: UInt64,
+        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
+    ) async throws -> FileNode {
+        // Use fts_open for fast directory traversal
+        guard
+            let fts = path.withCString({ cPath in
+                var paths: [UnsafeMutablePointer<CChar>?] = [
+                    UnsafeMutablePointer(mutating: cPath), nil,
+                ]
+                return fts_open(&paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, nil)
+            })
+        else {
+            state.skippedDirs += 1
+            return FileNode(
+                name: URL(filePath: path).lastPathComponent, url: URL(filePath: path),
+                isDirectory: true, fileSize: 0, children: [], depth: depth)
+        }
+        defer { fts_close(fts) }
+
+        // Build tree from fts entries
+        var rootNode: FileNode?
+        var dirStack: [(path: String, children: [FileNode], depth: Int)] = []
+
+        while let entry = fts_read(fts) {
+            try Task.checkCancellation()
+
+            let info = entry.pointee.fts_info
+            let entryPath = String(cString: entry.pointee.fts_path)
+            let entryName = URL(filePath: entryPath).lastPathComponent
+            let stat = entry.pointee.fts_statp.pointee
+
+            // Skip APFS system volume files (very large inodes)
+            if stat.st_ino > Self.systemVolumeInodeThreshold {
+                if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
+                continue
+            }
+
+            // Skip different devices (shouldn't happen with FTS_XDEV, but safety)
+            if stat.st_dev != rootDevice {
+                if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
+                state.skippedDirs += 1
+                continue
+            }
+
+            // Skip symlinks
+            if info == FTS_SL || info == FTS_SLNONE {
+                continue
+            }
+
+            let entryDepth = Int(entry.pointee.fts_level) + depth
+
+            switch Int32(info) {
+            case FTS_D:
+                // Entering directory — push onto stack
+                dirStack.append((path: entryPath, children: [], depth: entryDepth))
+
+            case FTS_DP:
+                // Leaving directory — build node from accumulated children
+                guard let current = dirStack.popLast() else { continue }
+                var sorted = current.children
+                sorted.sort { $0.subtreeSize > $1.subtreeSize }
+                let dirNode = FileNode(
+                    name: entryName,
+                    url: URL(filePath: entryPath),
+                    isDirectory: true,
+                    fileSize: 0,
+                    children: sorted,
+                    depth: current.depth)
+
+                if dirStack.isEmpty {
+                    rootNode = dirNode
+                } else {
+                    dirStack[dirStack.count - 1].children.append(dirNode)
+                }
+
+            case FTS_F:
+                // Regular file
+                let size = Int64(stat.st_blocks) * 512  // Physical blocks * block size
+                let url = URL(filePath: entryPath)
+                let ext = fileExtension(from: entryName)
+                let node = FileNode(
+                    name: entryName,
+                    url: url,
+                    isDirectory: false,
+                    fileSize: size,
+                    fileExtension: ext,
+                    depth: entryDepth)
+
+                if !dirStack.isEmpty {
+                    dirStack[dirStack.count - 1].children.append(node)
+                }
+
+                state.itemCount += 1
+
+            case FTS_DNR, FTS_ERR:
+                // Cannot read directory or error
+                state.skippedDirs += 1
+
+            default:
+                break
+            }
+
+            // Time-based progress reporting
+            let now = DispatchTime.now().uptimeNanoseconds
+            if now - state.lastProgressTime >= progressIntervalNs {
+                state.lastProgressTime = now
+                let count = state.itemCount
+                let skipped = state.skippedDirs
+                let total = estimatedTotal
+                let name = entryName
+                await MainActor.run { progressHandler(count, total, name, skipped) }
+            }
+        }
+
+        return rootNode ?? FileNode(
+            name: URL(filePath: path).lastPathComponent,
+            url: URL(filePath: path),
+            isDirectory: true, fileSize: 0, children: [], depth: depth)
+    }
+
+    private func fileExtension(from name: String) -> String {
+        guard let dotIndex = name.lastIndex(of: "."),
+            dotIndex != name.startIndex,
+            name.index(after: dotIndex) != name.endIndex
+        else { return "" }
+        return String(name[name.index(after: dotIndex)...]).lowercased()
+    }
+
     private static func estimatedItemCount(at path: String) -> Int {
         let buf = UnsafeMutablePointer<statfs>.allocate(capacity: 1)
         defer { buf.deallocate() }
         guard path.withCString({ statfs($0, buf) }) == 0 else { return 0 }
         return Int(buf.pointee.f_files) - Int(buf.pointee.f_ffree)
     }
+}
 
-    private func scanDirectory(
-        url: URL,
-        depth: Int,
-        resourceKeys: Set<URLResourceKey>,
-        rootVolumeID: NSObject?,
-        state: ScanState,
-        estimatedTotal: Int,
-        progressIntervalNs: UInt64,
-        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
-    ) async throws -> FileNode {
-        let fm = FileManager.default
-        let contents: [URL]
-        do {
-            contents = try fm.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: Array(resourceKeys),
-                options: []
-            )
-        } catch {
-            state.skippedDirs += 1
-            return FileNode(
-                name: url.lastPathComponent, url: url, isDirectory: true,
-                fileSize: 0, children: [], depth: depth)
+public enum ScanError: Error, LocalizedError {
+    case cannotAccessPath(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .cannotAccessPath(let path):
+            return "Cannot access path: \(path)"
         }
-
-        var children: [FileNode] = []
-        for childURL in contents {
-            try Task.checkCancellation()
-
-            let resourceValues: URLResourceValues
-            do {
-                resourceValues = try childURL.resourceValues(forKeys: resourceKeys)
-            } catch {
-                continue
-            }
-
-            if resourceValues.isSymbolicLink == true {
-                continue
-            }
-
-            if let rootVol = rootVolumeID,
-                let childVol = resourceValues.volumeIdentifier as? NSObject,
-                rootVol != childVol
-            {
-                state.skippedDirs += 1
-                continue
-            }
-
-            let isDirectory = resourceValues.isDirectory ?? false
-
-            if isDirectory {
-                let child = try await scanDirectory(
-                    url: childURL, depth: depth + 1, resourceKeys: resourceKeys,
-                    rootVolumeID: rootVolumeID, state: state,
-                    estimatedTotal: estimatedTotal,
-                    progressIntervalNs: progressIntervalNs,
-                    progressHandler: progressHandler)
-                children.append(child)
-            } else {
-                let size = physicalSize(for: resourceValues)
-                let ext = childURL.pathExtension.lowercased()
-                let node = FileNode(
-                    name: childURL.lastPathComponent, url: childURL,
-                    isDirectory: false, fileSize: size,
-                    fileExtension: ext, depth: depth + 1)
-                children.append(node)
-            }
-
-            state.itemCount += 1
-
-            let now = DispatchTime.now().uptimeNanoseconds
-            if now - state.lastProgressTime >= progressIntervalNs {
-                state.lastProgressTime = now
-                let count = state.itemCount
-                let path = childURL.lastPathComponent
-                let skipped = state.skippedDirs
-                let total = estimatedTotal
-                await MainActor.run { progressHandler(count, total, path, skipped) }
-            }
-        }
-
-        children.sort { $0.subtreeSize > $1.subtreeSize }
-
-        return FileNode(
-            name: url.lastPathComponent, url: url, isDirectory: true,
-            fileSize: 0, children: children,
-            depth: depth)
-    }
-
-    private func physicalSize(for values: URLResourceValues) -> Int64 {
-        if values.isUbiquitousItem == true {
-            let status = values.ubiquitousItemDownloadingStatus
-            if status != .current {
-                return Int64(values.totalFileAllocatedSize ?? 0)
-            }
-        }
-        return Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
     }
 }
 
