@@ -59,9 +59,6 @@ public final class AppState {
         navigationStack = []
         scanProgress.reset()
         scanProgress.isScanning = true
-        // statfs inode estimate is only accurate when scanning a volume root
-        let path = url.path(percentEncoded: false)
-        scanProgress.isVolumeRootScan = Self.isVolumeRoot(path: path)
         selectedURL = url
 
         if url.startAccessingSecurityScopedResource() {
@@ -179,11 +176,10 @@ public final class AppState {
 
         scanTask = Task { [weak self] in
             do {
-                let node = try await scanner.scan(url: url) { [weak self] count, total, path, skipped in
+                let node = try await scanner.scan(url: url) { [weak self] count, path, skipped in
                     guard let self else { return }
                     self.scanProgress.filesScanned = count
-                    self.scanProgress.totalEstimatedItems = total
-                    self.scanProgress.currentPath = path
+                                        self.scanProgress.currentPath = path
                     self.scanProgress.skippedDirectories = skipped
                     self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
                 }

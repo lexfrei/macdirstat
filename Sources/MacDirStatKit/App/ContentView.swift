@@ -134,22 +134,19 @@ public struct ContentView: View {
         return VStack(spacing: 16) {
             Spacer()
 
-            if let fraction = progress.fractionComplete {
-                ProgressView(value: fraction)
-                    .frame(maxWidth: 300)
-                Text(String(format: "%.0f%%", fraction * 100))
-                    .font(.title)
-                    .monospacedDigit()
-            } else {
-                ProgressView()
-                    .controlSize(.large)
-            }
-
+            ProgressView()
+                .controlSize(.large)
             Text("Scanning...")
                 .font(.title2)
             Text("\(progress.filesScanned) items")
                 .font(.headline)
                 .monospacedDigit()
+            if progress.itemsPerSecond > 0 {
+                Text("\(progress.itemsPerSecond) items/sec")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
             if progress.skippedDirectories > 0 {
                 Text("\(progress.skippedDirectories) skipped")
                     .font(.caption)

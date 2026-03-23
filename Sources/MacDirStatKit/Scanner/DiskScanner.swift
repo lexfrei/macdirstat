@@ -4,15 +4,12 @@ import Foundation
 public protocol FileSystemScanning: Sendable {
     func scan(
         url: URL,
-        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode
 }
 
-// MARK: - FTS-based fast scanner
-
 public struct FileManagerScanner: FileSystemScanning {
     private let progressIntervalMs: UInt64
-    /// Inode threshold for APFS system volume files (2^62)
     private static let systemVolumeInodeThreshold: UInt64 = 1 << 62
 
     public init(progressIntervalMs: UInt64 = 100) {
@@ -21,17 +18,10 @@ public struct FileManagerScanner: FileSystemScanning {
 
     public func scan(
         url: URL,
-        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         let path = url.path(percentEncoded: false)
-        // On APFS, "/" is the system volume (small, read-only).
-        // Actual user data lives on the data volume at /System/Volumes/Data.
-        // Use the data volume for inode estimate when scanning root.
-        let statPath = (path == "/" || path == "")
-            ? "/System/Volumes/Data" : path
-        let estimatedTotal = Self.estimatedItemCount(at: statPath)
 
-        // Get root device to stay on same filesystem
         let rootDevice: dev_t = try {
             var sb = stat()
             guard lstat(path, &sb) == 0 else {
@@ -40,20 +30,16 @@ public struct FileManagerScanner: FileSystemScanning {
             return sb.st_dev
         }()
 
-        await MainActor.run { progressHandler(0, estimatedTotal, "", 0) }
-
         let state = ScanState()
         let intervalNs = progressIntervalMs * 1_000_000
 
         let root = try await ftsWalk(
             path: path, depth: 0, rootDevice: rootDevice,
-            state: state, estimatedTotal: estimatedTotal,
-            progressIntervalNs: intervalNs, progressHandler: progressHandler)
+            state: state, progressIntervalNs: intervalNs,
+            progressHandler: progressHandler)
 
-        let finalSnap = state.snapshot()
-        await MainActor.run {
-            progressHandler(finalSnap.itemCount, estimatedTotal, "", finalSnap.skippedDirs)
-        }
+        let snap = state.snapshot()
+        await MainActor.run { progressHandler(snap.itemCount, "", snap.skippedDirs) }
         return root
     }
 
@@ -62,11 +48,9 @@ public struct FileManagerScanner: FileSystemScanning {
         depth: Int,
         rootDevice: dev_t,
         state: ScanState,
-        estimatedTotal: Int,
         progressIntervalNs: UInt64,
-        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
-        // Use fts_open for fast directory traversal
         guard
             let fts = path.withCString({ cPath in
                 var paths: [UnsafeMutablePointer<CChar>?] = [
@@ -82,7 +66,6 @@ public struct FileManagerScanner: FileSystemScanning {
         }
         defer { fts_close(fts) }
 
-        // Build tree from fts entries
         var rootNode: FileNode?
         var dirStack: [(path: String, children: [FileNode], depth: Int)] = []
 
@@ -92,16 +75,16 @@ public struct FileManagerScanner: FileSystemScanning {
             let info = entry.pointee.fts_info
             let entryPath = String(cString: entry.pointee.fts_path)
             let entryName = Self.lastName(from: entryPath)
-            let stat = entry.pointee.fts_statp.pointee
+            let statp = entry.pointee.fts_statp!.pointee
 
             // Skip APFS system volume files (very large inodes)
-            if stat.st_ino > Self.systemVolumeInodeThreshold {
+            if statp.st_ino > Self.systemVolumeInodeThreshold {
                 if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
                 continue
             }
 
-            // Skip different devices (shouldn't happen with FTS_XDEV, but safety)
-            if stat.st_dev != rootDevice {
+            // Skip different devices
+            if statp.st_dev != rootDevice {
                 if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
                 state.incrementSkipped()
                 continue
@@ -116,17 +99,15 @@ public struct FileManagerScanner: FileSystemScanning {
 
             switch Int32(info) {
             case FTS_D:
-                // Entering directory — push onto stack
                 dirStack.append((path: entryPath, children: [], depth: entryDepth))
                 state.incrementItems()
 
             case FTS_DP:
-                // Leaving directory — build node from accumulated children
                 guard let current = dirStack.popLast() else { continue }
                 var sorted = current.children
                 sorted.sort { $0.subtreeSize > $1.subtreeSize }
                 let dirNode = FileNode(
-                    inode: stat.st_ino,
+                    inode: statp.st_ino,
                     name: entryName,
                     path: entryPath,
                     isDirectory: true,
@@ -141,11 +122,10 @@ public struct FileManagerScanner: FileSystemScanning {
                 }
 
             case FTS_F:
-                // Regular file — physical size via st_blocks
-                let size = Int64(stat.st_blocks) * 512
+                let size = Int64(statp.st_size)
                 let ext = Self.fileExtension(from: entryName)
                 let node = FileNode(
-                    inode: stat.st_ino,
+                    inode: statp.st_ino,
                     name: entryName,
                     path: entryPath,
                     isDirectory: false,
@@ -156,24 +136,20 @@ public struct FileManagerScanner: FileSystemScanning {
                 if !dirStack.isEmpty {
                     dirStack[dirStack.count - 1].children.append(node)
                 }
-
                 state.incrementItems()
 
             case FTS_DNR, FTS_ERR:
-                // Cannot read directory or error
                 state.incrementSkipped()
 
             default:
                 break
             }
 
-            // Time-based progress reporting (atomic check + update)
             let now = DispatchTime.now().uptimeNanoseconds
             if state.shouldReportProgress(now: now, interval: progressIntervalNs) {
                 let snap = state.snapshot()
-                let total = estimatedTotal
                 let name = entryName
-                await MainActor.run { progressHandler(snap.itemCount, total, name, snap.skippedDirs) }
+                await MainActor.run { progressHandler(snap.itemCount, name, snap.skippedDirs) }
             }
         }
 
@@ -182,7 +158,6 @@ public struct FileManagerScanner: FileSystemScanning {
             isDirectory: true, fileSize: 0, children: [], depth: depth)
     }
 
-    /// Extract last path component without creating a URL.
     static func lastName(from path: String) -> String {
         guard let slashIdx = path.lastIndex(of: "/") else { return path }
         let afterSlash = path.index(after: slashIdx)
@@ -197,13 +172,6 @@ public struct FileManagerScanner: FileSystemScanning {
         else { return "" }
         return String(name[name.index(after: dotIndex)...]).lowercased()
     }
-
-    private static func estimatedItemCount(at path: String) -> Int {
-        let buf = UnsafeMutablePointer<statfs>.allocate(capacity: 1)
-        defer { buf.deallocate() }
-        guard path.withCString({ statfs($0, buf) }) == 0 else { return 0 }
-        return max(0, Int(buf.pointee.f_files) - Int(buf.pointee.f_ffree))
-    }
 }
 
 public enum ScanError: Error, LocalizedError {
@@ -217,7 +185,6 @@ public enum ScanError: Error, LocalizedError {
     }
 }
 
-/// Thread-safe scan state. All mutations go through the lock as compound operations.
 private final class ScanState: @unchecked Sendable {
     private let lock = NSLock()
     private var _itemCount: Int = 0
@@ -230,7 +197,6 @@ private final class ScanState: @unchecked Sendable {
     func incrementItems() { lock.withLock { _itemCount += 1 } }
     func incrementSkipped() { lock.withLock { _skippedDirs += 1 } }
 
-    /// Check and update progress time atomically. Returns true if enough time passed.
     func shouldReportProgress(now: UInt64, interval: UInt64) -> Bool {
         lock.withLock {
             if now - _lastProgressTime >= interval {
