@@ -188,7 +188,7 @@ public struct FileManagerScanner: FileSystemScanning {
         let buf = UnsafeMutablePointer<statfs>.allocate(capacity: 1)
         defer { buf.deallocate() }
         guard path.withCString({ statfs($0, buf) }) == 0 else { return 0 }
-        return Int(buf.pointee.f_files) - Int(buf.pointee.f_ffree)
+        return max(0, Int(buf.pointee.f_files) - Int(buf.pointee.f_ffree))
     }
 }
 

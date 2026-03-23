@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Permissions {
-    private static let protectedPaths: [String] = [
+    private static let protectedRelPaths: [String] = [
         "Desktop", "Documents", "Downloads", "Pictures", "Music",
         "Library/Application Support/AddressBook",
         "Library/Calendars", "Library/Reminders",
@@ -10,18 +10,16 @@ public enum Permissions {
     ]
 
     /// Pre-trigger TCC permission dialogs for protected directories
-    /// that overlap with the scan path. Only triggers dialogs when
-    /// the scan path is a parent of (or equal to) a protected directory.
+    /// that overlap with the scan path. Lightweight: only stat, no listing.
     public static func preTriggerIfNeeded(scanPath: String) {
         let home = NSHomeDirectory()
+        let fm = FileManager.default
 
-        for relPath in protectedPaths {
+        for relPath in protectedRelPaths {
             let fullPath = (home as NSString).appendingPathComponent(relPath)
-            // Only trigger if the scan path is a parent of the protected path
-            if fullPath.hasPrefix(scanPath) || scanPath == "/" {
-                _ = FileManager.default.isReadableFile(atPath: fullPath)
-                _ = try? FileManager.default.contentsOfDirectory(atPath: fullPath)
-            }
+            guard fullPath.hasPrefix(scanPath) || scanPath == "/" else { continue }
+            // isReadableFile triggers TCC dialog if needed (lightweight stat)
+            _ = fm.isReadableFile(atPath: fullPath)
         }
     }
 }

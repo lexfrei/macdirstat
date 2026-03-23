@@ -5,8 +5,6 @@ public protocol FileSystemWatching: Sendable {
     func stop()
 }
 
-/// FSEvents-based filesystem watcher.
-/// IMPORTANT: Always call `stop()` before releasing the last reference.
 public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "la.lex.macdirstat.fswatcher")
@@ -14,30 +12,33 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     private var handler: (@Sendable ([String]) -> Void)?
     private var pendingPaths: Set<String> = []
     private var debounceWork: DispatchWorkItem?
+    private var contextRef: Unmanaged<WatcherContext>?
 
     public init(debounceInterval: TimeInterval = 0.5) {
         self.debounceInterval = debounceInterval
     }
 
     public func start(paths: [String], handler: @escaping @Sendable ([String]) -> Void) {
-        queue.sync {
-            stopInternal()
-            self.handler = handler
+        stop()
+
+        let context = WatcherContext()
+        context.onEvent = { [weak self] paths in
+            self?.queue.async { self?.handleEventsInternal(paths: paths) }
         }
 
-        // Use a separate context object to avoid retaining self in the callback
-        let context = WatcherContext()
+        let retained = Unmanaged.passRetained(context)
 
         var fsContext = FSEventStreamContext()
-        fsContext.info = Unmanaged.passRetained(context).toOpaque()
+        fsContext.info = retained.toOpaque()
 
         let callback: FSEventStreamCallback = {
             _, clientInfo, numEvents, eventPaths, _, _ in
             guard let clientInfo = clientInfo else { return }
             let ctx = Unmanaged<WatcherContext>.fromOpaque(clientInfo).takeUnretainedValue()
-            let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue()
-                as! [String]
-            ctx.onEvent?(Array(paths.prefix(numEvents)))
+            guard let cfPaths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue()
+                as? [String]
+            else { return }
+            ctx.onEvent?(Array(cfPaths.prefix(numEvents)))
         }
 
         let pathsToWatch = paths as CFArray
@@ -48,28 +49,25 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents))
 
         queue.sync {
-            // Wire context to self (weak to avoid retain cycle)
-            context.onEvent = { [weak self] paths in
-                self?.handleEvents(paths: paths)
-            }
+            self.handler = handler
+            self.contextRef = retained
             self.stream = newStream
-            if let stream = newStream {
-                FSEventStreamSetDispatchQueue(stream, self.queue)
-                FSEventStreamStart(stream)
+            if let s = newStream {
+                FSEventStreamSetDispatchQueue(s, self.queue)
+                FSEventStreamStart(s)
             }
         }
     }
 
-    private func handleEvents(paths: [String]) {
-        // Already on self.queue
+    private func handleEventsInternal(paths: [String]) {
         pendingPaths.formUnion(paths)
         debounceWork?.cancel()
 
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            let paths = Array(self.pendingPaths)
+            let collected = Array(self.pendingPaths)
             self.pendingPaths.removeAll()
-            self.handler?(paths)
+            self.handler?(collected)
         }
         debounceWork = work
         queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
@@ -80,29 +78,28 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     private func stopInternal() {
-        if let stream = stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
+        if let s = stream {
+            FSEventStreamStop(s)
+            FSEventStreamInvalidate(s)
+            FSEventStreamRelease(s)
         }
         stream = nil
         handler = nil
         debounceWork?.cancel()
         debounceWork = nil
         pendingPaths.removeAll()
+        contextRef?.release()
+        contextRef = nil
     }
 
     deinit {
-        // stop() must be called before deinit. Since we use weak self in the
-        // callback context, there's no retain cycle — deinit will be called
-        // when all external references are released. We clean up the stream
-        // here as a safety net.
+        // queue.sync is unsafe in deinit (potential deadlock if deinit
+        // happens on queue). Direct call is acceptable: at deinit time
+        // no external references exist, so no new work can be enqueued.
         stopInternal()
     }
 }
 
-/// Separate context object passed to FSEvents callback.
-/// Uses weak reference to watcher via closure to avoid retain cycles.
 private final class WatcherContext {
     var onEvent: (([String]) -> Void)?
 }

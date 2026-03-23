@@ -37,6 +37,17 @@ public final class AppState {
         self.scanner = scanner
     }
 
+    deinit {
+        watcher.stop()
+    }
+
+    public func cancelScan() {
+        scanTask?.cancel()
+        stopLiveWatching()
+        stopSecurityScopedAccess()
+        scanProgress.isScanning = false
+    }
+
     public func startScan(url: URL) {
         scanTask?.cancel()
         stopLiveWatching()
@@ -54,7 +65,6 @@ public final class AppState {
             securityScopedURL = url
         }
 
-        // Pre-trigger TCC dialogs for protected dirs under scan path
         Permissions.preTriggerIfNeeded(scanPath: url.path(percentEncoded: false))
 
         runScan(url: url, releaseSecurityScope: true)
@@ -77,19 +87,19 @@ public final class AppState {
         nodesToDelete = []
         showDeleteConfirmation = false
 
-        Task.detached {
+        Task.detached { [weak self] in
             let fm = FileManager.default
             var errorMsg: String?
             for node in nodes {
                 do {
                     try fm.trashItem(at: node.url, resultingItemURL: nil)
                 } catch {
-                    errorMsg =
-                        "Failed to trash \(node.name): \(error.localizedDescription)"
+                    errorMsg = "Failed to trash \(node.name): \(error.localizedDescription)"
                     break
                 }
             }
-            await MainActor.run {
+            await MainActor.run { [weak self] in
+                guard let self else { return }
                 if let msg = errorMsg { self.scanError = msg }
                 if let url = self.selectedURL { self.rescan(url: url) }
             }
@@ -130,8 +140,8 @@ public final class AppState {
         guard let url = selectedURL, rootNode != nil else { return }
         isLiveWatching = true
         watcher.start(paths: [url.path(percentEncoded: false)]) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self, self.isLiveWatching,
+            Task { @MainActor [weak self] in
+                guard let self, self.isLiveWatching,
                     !self.scanProgress.isScanning,
                     let url = self.selectedURL
                 else { return }
@@ -157,26 +167,26 @@ public final class AppState {
         let scanner = self.scanner
         let startTime = Date()
 
-        scanTask = Task {
+        scanTask = Task { [weak self] in
             do {
-                let node = try await scanner.scan(url: url) { count, total, path, skipped in
-                    self.scanProgress.filesScanned = count
-                    self.scanProgress.totalEstimatedItems = total
-                    self.scanProgress.currentPath = path
-                    self.scanProgress.skippedDirectories = skipped
-                    self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+                let node = try await scanner.scan(url: url) { [weak self] count, total, path, skipped in
+                    self?.scanProgress.filesScanned = count
+                    self?.scanProgress.totalEstimatedItems = total
+                    self?.scanProgress.currentPath = path
+                    self?.scanProgress.skippedDirectories = skipped
+                    self?.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
                 }
-                self.rootNode = node
-                self.colorMapper = self.colorMapper.withMapping(from: node)
-                self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+                self?.rootNode = node
+                self?.colorMapper = self?.colorMapper.withMapping(from: node) ?? GoldenAngleColorMapper()
+                self?.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
                 // Scan cancelled
             } catch {
-                self.scanError = error.localizedDescription
+                self?.scanError = error.localizedDescription
             }
-            self.scanProgress.isScanning = false
+            self?.scanProgress.isScanning = false
             if releaseSecurityScope {
-                self.stopSecurityScopedAccess()
+                self?.stopSecurityScopedAccess()
             }
         }
     }

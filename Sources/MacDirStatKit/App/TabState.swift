@@ -40,6 +40,9 @@ public final class MultiTabState {
     }
 
     public func closeTab(_ id: UUID) {
+        if let tab = tabs.first(where: { $0.id == id }) {
+            tab.appState.cancelScan()
+        }
         tabs.removeAll { $0.id == id }
         if selectedTabID == id {
             selectedTabID = tabs.first?.id
