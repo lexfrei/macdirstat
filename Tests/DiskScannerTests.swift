@@ -5,7 +5,7 @@ import Testing
 
 @Suite("DiskScanner")
 struct DiskScannerTests {
-    private let scanner = FileManagerScanner(progressBatchSize: 1)
+    private let scanner = FileManagerScanner(progressIntervalMs: 0)
 
     private func createTempDir() throws -> URL {
         let tempDir = FileManager.default.temporaryDirectory

@@ -8,10 +8,10 @@ public protocol FileSystemScanning: Sendable {
 }
 
 public struct FileManagerScanner: FileSystemScanning {
-    private let progressBatchSize: Int
+    private let progressIntervalMs: UInt64
 
-    public init(progressBatchSize: Int = 500) {
-        self.progressBatchSize = progressBatchSize
+    public init(progressIntervalMs: UInt64 = 100) {
+        self.progressIntervalMs = progressIntervalMs
     }
 
     public func scan(
@@ -24,20 +24,21 @@ public struct FileManagerScanner: FileSystemScanning {
             .ubiquitousItemDownloadingStatusKey,
         ]
 
-        // Get the volume identifier of the root to avoid crossing filesystem boundaries
         let rootVolumeID = try url.resourceValues(forKeys: [.volumeIdentifierKey])
             .volumeIdentifier as? NSObject
 
-        var fileCount = 0
-        var skippedDirs = 0
+        let state = ScanState()
+        let intervalNs = progressIntervalMs * 1_000_000
+
         let root = try await scanDirectory(
             url: url, depth: 0, resourceKeys: resourceKeys,
-            rootVolumeID: rootVolumeID,
-            fileCount: &fileCount, skippedDirs: &skippedDirs,
+            rootVolumeID: rootVolumeID, state: state,
+            progressIntervalNs: intervalNs,
             progressHandler: progressHandler)
-        let finalCount = fileCount
-        let finalSkipped = skippedDirs
-        await MainActor.run { progressHandler(finalCount, "", finalSkipped) }
+
+        await MainActor.run {
+            progressHandler(state.itemCount, "", state.skippedDirs)
+        }
         return root
     }
 
@@ -46,8 +47,8 @@ public struct FileManagerScanner: FileSystemScanning {
         depth: Int,
         resourceKeys: Set<URLResourceKey>,
         rootVolumeID: NSObject?,
-        fileCount: inout Int,
-        skippedDirs: inout Int,
+        state: ScanState,
+        progressIntervalNs: UInt64,
         progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         let fm = FileManager.default
@@ -58,7 +59,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 options: []
             )
         } catch {
-            skippedDirs += 1
+            state.skippedDirs += 1
             return FileNode(
                 name: url.lastPathComponent, url: url, isDirectory: true,
                 fileSize: 0, children: [], depth: depth)
@@ -79,12 +80,11 @@ public struct FileManagerScanner: FileSystemScanning {
                 continue
             }
 
-            // Skip entries on different volumes (network mounts, external drives under /Volumes)
             if let rootVol = rootVolumeID,
                 let childVol = resourceValues.volumeIdentifier as? NSObject,
                 rootVol != childVol
             {
-                skippedDirs += 1
+                state.skippedDirs += 1
                 continue
             }
 
@@ -93,8 +93,8 @@ public struct FileManagerScanner: FileSystemScanning {
             if isDirectory {
                 let child = try await scanDirectory(
                     url: childURL, depth: depth + 1, resourceKeys: resourceKeys,
-                    rootVolumeID: rootVolumeID,
-                    fileCount: &fileCount, skippedDirs: &skippedDirs,
+                    rootVolumeID: rootVolumeID, state: state,
+                    progressIntervalNs: progressIntervalNs,
                     progressHandler: progressHandler)
                 children.append(child)
             } else {
@@ -105,13 +105,16 @@ public struct FileManagerScanner: FileSystemScanning {
                     isDirectory: false, fileSize: size,
                     fileExtension: ext, depth: depth + 1)
                 children.append(node)
-                fileCount += 1
             }
 
-            if fileCount > 0, fileCount % progressBatchSize == 0 {
-                let count = fileCount
+            state.itemCount += 1
+
+            let now = DispatchTime.now().uptimeNanoseconds
+            if now - state.lastProgressTime >= progressIntervalNs {
+                state.lastProgressTime = now
+                let count = state.itemCount
                 let path = childURL.lastPathComponent
-                let skipped = skippedDirs
+                let skipped = state.skippedDirs
                 await MainActor.run { progressHandler(count, path, skipped) }
             }
         }
@@ -124,21 +127,19 @@ public struct FileManagerScanner: FileSystemScanning {
             depth: depth)
     }
 
-    /// Returns the physical on-disk size, accounting for iCloud-evicted files.
-    /// For files evicted to iCloud, totalFileAllocatedSize is 0 or minimal — we use that.
-    /// We never fall back to logical fileSize, since we want actual disk usage.
     private func physicalSize(for values: URLResourceValues) -> Int64 {
-        // If it's an iCloud item that isn't downloaded, report 0 disk usage
         if values.isUbiquitousItem == true {
             let status = values.ubiquitousItemDownloadingStatus
             if status != .current {
-                // File is evicted or downloading — not fully on disk
                 return Int64(values.totalFileAllocatedSize ?? 0)
             }
         }
-
-        // Use physical allocated size (accounts for sparse files, compression)
-        // Fall back to logical size only for non-iCloud local files
         return Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
     }
+}
+
+private final class ScanState: @unchecked Sendable {
+    var itemCount: Int = 0
+    var skippedDirs: Int = 0
+    var lastProgressTime: UInt64 = 0
 }

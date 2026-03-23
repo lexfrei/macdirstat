@@ -9,8 +9,16 @@ Native macOS disk usage visualizer with squarified treemap. Scans directories an
 - Extension-based color mapping with golden angle distribution
 - Hover highlighting and click selection
 - Double-click drill-down with breadcrumb navigation
+- Pinch-to-zoom and pan when zoomed in
 - Directory tree sidebar with file sizes
 - Extension legend with color indicators
+- Real-time filesystem watching (FSEvents)
+- Scan snapshots and comparison (diff added/removed/changed)
+- File deletion (Move to Trash with confirmation)
+- Multi-tab scanning with volume discovery
+- Context menu: Reveal in Finder, Copy Path
+- Stays on same volume (skips network mounts and external drives)
+- Correct iCloud handling (shows physical on-disk size)
 
 ## Requirements
 
@@ -26,11 +34,11 @@ make test    # run tests
 make clean   # clean build artifacts
 ```
 
-Or directly with Swift Package Manager:
+Create a standalone .app bundle:
 
 ```bash
-swift build
-swift run MacDirStat
+./scripts/bundle-app.sh
+open MacDirStat.app
 ```
 
 ## License

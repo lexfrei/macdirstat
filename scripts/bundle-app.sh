@@ -44,6 +44,12 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
     <true/>
     <key>NSSystemAdministrationUsageDescription</key>
     <string>MacDirStat needs access to scan disk usage.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>MacDirStat needs access to scan your Desktop folder.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>MacDirStat needs access to scan your Documents folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>MacDirStat needs access to scan your Downloads folder.</string>
 </dict>
 </plist>
 PLIST

@@ -39,7 +39,7 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
         let newStream = FSEventStreamCreate(
             nil, callback, &context, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            debounceInterval,
+            0.1,  // Low FSEvents latency; debouncing is handled in handleEvents
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents))
 
         queue.sync {
@@ -84,6 +84,8 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     deinit {
+        // Safe: deinit means no other references exist, so no concurrent access
+        // FSEventStream must be stopped before deallocation
         stopInternal()
     }
 }

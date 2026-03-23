@@ -25,6 +25,9 @@ public final class AppState {
     public static let minZoom: CGFloat = 1.0
     public static let maxZoom: CGFloat = 10.0
 
+    public var showDeleteConfirmation = false
+    public var nodesToDelete: [FileNode] = []
+
     private var scanTask: Task<Void, Never>?
     private var securityScopedURL: URL?
     private let watcher = FSEventWatcher(debounceInterval: 0.5)
@@ -36,6 +39,7 @@ public final class AppState {
 
     public func startScan(url: URL) {
         scanTask?.cancel()
+        stopLiveWatching()
         stopSecurityScopedAccess()
         rootNode = nil
         scanError = nil
@@ -65,12 +69,12 @@ public final class AppState {
                 self.colorMapper = self.colorMapper.withMapping(from: node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
-                self.stopSecurityScopedAccess()
+                // Scan was cancelled
             } catch {
                 self.scanError = error.localizedDescription
-                self.stopSecurityScopedAccess()
             }
             self.scanProgress.isScanning = false
+            self.stopSecurityScopedAccess()
         }
     }
 
@@ -80,15 +84,13 @@ public final class AppState {
         selectedNode = nil
     }
 
-    public var showDeleteConfirmation = false
-    public var nodesToDelete: [FileNode] = []
-
     public func requestDelete(nodes: [FileNode]) {
         nodesToDelete = nodes
         showDeleteConfirmation = true
     }
 
     public func confirmDelete() {
+        scanTask?.cancel()
         let fm = FileManager.default
         for node in nodesToDelete {
             do {
@@ -150,12 +152,15 @@ public final class AppState {
         }
     }
 
-    private func stopLiveWatching() {
+    public func stopLiveWatching() {
+        guard isLiveWatching else { return }
         isLiveWatching = false
         watcher.stop()
     }
 
     private func rescan(url: URL) {
+        scanTask?.cancel()
+        scanProgress.reset()
         scanProgress.isScanning = true
         let scanner = self.scanner
         let startTime = Date()
@@ -171,8 +176,10 @@ public final class AppState {
                 self.rootNode = node
                 self.colorMapper = self.colorMapper.withMapping(from: node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+            } catch is CancellationError {
+                // Rescan cancelled
             } catch {
-                // Rescan failed silently — keep existing tree
+                self.scanError = "Rescan failed: \(error.localizedDescription)"
             }
             self.scanProgress.isScanning = false
         }

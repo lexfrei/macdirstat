@@ -142,19 +142,26 @@ public struct ContentView: View {
                 .controlSize(.large)
             Text("Scanning...")
                 .font(.title2)
-            Text("\(appState.scanProgress.filesScanned) files")
+            Text("\(appState.scanProgress.filesScanned) items")
                 .font(.headline)
                 .monospacedDigit()
+            if appState.scanProgress.skippedDirectories > 0 {
+                Text("\(appState.scanProgress.skippedDirectories) skipped")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             Text(appState.scanProgress.currentPath)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: 400)
-            Text(String(format: "%.1fs", appState.scanProgress.elapsedTime))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Text(String(format: "%.0fs", appState.scanProgress.elapsedTime))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
             Spacer()
         }
     }
@@ -199,13 +206,13 @@ public struct ContentView: View {
             if appState.scanProgress.isScanning {
                 ProgressView()
                     .controlSize(.small)
-                Text("Scanning: \(appState.scanProgress.filesScanned) files")
+                Text("Scanning: \(appState.scanProgress.filesScanned) items")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             } else if let root = appState.rootNode {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Text("\(appState.scanProgress.filesScanned) files")
+                Text("\(appState.scanProgress.filesScanned) items")
                     .monospacedDigit()
                 Text(SizeFormatter.format(root.subtreeSize))
                     .foregroundStyle(.secondary)
