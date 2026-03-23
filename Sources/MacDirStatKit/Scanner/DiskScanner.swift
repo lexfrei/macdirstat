@@ -74,8 +74,10 @@ public struct FileManagerScanner: FileSystemScanning {
                 children.append(node)
             }
 
-            fileCount += 1
-            if fileCount % progressBatchSize == 0 {
+            if !isDirectory {
+                fileCount += 1
+            }
+            if fileCount > 0, fileCount % progressBatchSize == 0 {
                 let count = fileCount
                 let path = childURL.lastPathComponent
                 await MainActor.run { progressHandler(count, path) }

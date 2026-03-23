@@ -5,11 +5,15 @@ public struct TreemapView: View {
     let renderer: TreemapRenderer
 
     @State private var cachedRects: [LayoutRect] = []
-    @State private var lastSize: CGSize = .zero
+    @State private var currentSize: CGSize = .zero
 
     public init(appState: AppState, renderer: TreemapRenderer) {
         self.appState = appState
         self.renderer = renderer
+    }
+
+    private var viewRootID: UUID? {
+        appState.currentViewRoot?.id
     }
 
     public var body: some View {
@@ -22,20 +26,31 @@ public struct TreemapView: View {
                     selectedNode: appState.selectedNode)
             }
             .onChange(of: geometry.size) { _, newSize in
+                currentSize = newSize
                 recomputeLayout(size: newSize)
             }
+            .onChange(of: viewRootID) { _, _ in
+                recomputeLayout(size: currentSize)
+            }
+            .onChange(of: appState.rootNode?.id) { _, _ in
+                recomputeLayout(size: currentSize)
+            }
             .onAppear {
+                currentSize = geometry.size
                 recomputeLayout(size: geometry.size)
             }
         }
     }
 
     private func recomputeLayout(size: CGSize) {
+        guard size.width > 0, size.height > 0 else {
+            cachedRects = []
+            return
+        }
         guard let root = appState.currentViewRoot else {
             cachedRects = []
             return
         }
-        lastSize = size
         let rect = CGRect(origin: .zero, size: size)
         cachedRects = renderer.computeLayout(root: root, in: rect)
     }

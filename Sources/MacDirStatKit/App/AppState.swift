@@ -17,7 +17,7 @@ public final class AppState {
         navigationStack.last ?? rootNode
     }
 
-    public let colorMapper = GoldenAngleColorMapper()
+    public var colorMapper = GoldenAngleColorMapper()
 
     private var scanTask: Task<Void, Never>?
     public let scanner: any FileSystemScanning
@@ -48,7 +48,7 @@ public final class AppState {
                     self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
                 }
                 self.rootNode = node
-                self.colorMapper.buildMapping(from: node)
+                self.colorMapper = self.colorMapper.withMapping(from: node)
                 self.scanProgress.filesScanned = self.countFiles(node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {

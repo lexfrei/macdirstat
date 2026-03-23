@@ -27,6 +27,7 @@ public struct ContentView: View {
             allowedContentTypes: [.folder]
         ) { result in
             if case .success(let url) = result {
+                _ = url.startAccessingSecurityScopedResource()
                 appState.startScan(url: url)
             }
         }

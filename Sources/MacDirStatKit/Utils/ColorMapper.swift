@@ -6,13 +6,8 @@ public struct ExtensionLegendEntry: Sendable {
     public let totalSize: Int64
 }
 
-public protocol ColorMapping: Sendable {
-    func color(for fileExtension: String) -> Color
-    func legend(for rootNode: FileNode) -> [ExtensionLegendEntry]
-}
-
-public final class GoldenAngleColorMapper: ColorMapping, @unchecked Sendable {
-    private var extensionToIndex: [String: Int] = [:]
+public struct GoldenAngleColorMapper: Sendable {
+    private let extensionToIndex: [String: Int]
     private let maxDistinct: Int
     private let saturation: Double
     private let brightness: Double
@@ -22,23 +17,38 @@ public final class GoldenAngleColorMapper: ColorMapping, @unchecked Sendable {
     public static let folderColor = Color(hue: 0, saturation: 0, brightness: 0.333)
 
     public init(maxDistinct: Int = 20, saturation: Double = 0.65, brightness: Double = 0.85) {
+        self.extensionToIndex = [:]
         self.maxDistinct = maxDistinct
         self.saturation = saturation
         self.brightness = brightness
     }
 
-    public func buildMapping(from rootNode: FileNode) {
+    private init(
+        extensionToIndex: [String: Int], maxDistinct: Int,
+        saturation: Double, brightness: Double
+    ) {
+        self.extensionToIndex = extensionToIndex
+        self.maxDistinct = maxDistinct
+        self.saturation = saturation
+        self.brightness = brightness
+    }
+
+    public func withMapping(from rootNode: FileNode) -> GoldenAngleColorMapper {
         var sizesPerExt: [String: Int64] = [:]
-        accumulateSizes(rootNode, into: &sizesPerExt)
+        Self.accumulateSizes(rootNode, into: &sizesPerExt)
 
         let sorted = sizesPerExt
             .sorted { $0.value > $1.value }
             .prefix(maxDistinct)
 
-        extensionToIndex = [:]
+        var mapping: [String: Int] = [:]
         for (index, entry) in sorted.enumerated() {
-            extensionToIndex[entry.key] = index
+            mapping[entry.key] = index
         }
+
+        return GoldenAngleColorMapper(
+            extensionToIndex: mapping, maxDistinct: maxDistinct,
+            saturation: saturation, brightness: brightness)
     }
 
     public func color(for fileExtension: String) -> Color {
@@ -61,7 +71,7 @@ public final class GoldenAngleColorMapper: ColorMapping, @unchecked Sendable {
 
     public func legend(for rootNode: FileNode) -> [ExtensionLegendEntry] {
         var sizesPerExt: [String: Int64] = [:]
-        accumulateSizes(rootNode, into: &sizesPerExt)
+        Self.accumulateSizes(rootNode, into: &sizesPerExt)
 
         return sizesPerExt
             .sorted { $0.value > $1.value }
@@ -74,7 +84,7 @@ public final class GoldenAngleColorMapper: ColorMapping, @unchecked Sendable {
             }
     }
 
-    private func accumulateSizes(_ node: FileNode, into sizes: inout [String: Int64]) {
+    private static func accumulateSizes(_ node: FileNode, into sizes: inout [String: Int64]) {
         if node.isDirectory {
             for child in node.children ?? [] {
                 accumulateSizes(child, into: &sizes)
