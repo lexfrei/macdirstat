@@ -126,6 +126,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 var sorted = current.children
                 sorted.sort { $0.subtreeSize > $1.subtreeSize }
                 let dirNode = FileNode(
+                    inode: stat.st_ino,
                     name: entryName,
                     path: entryPath,
                     isDirectory: true,
@@ -144,6 +145,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 let size = Int64(stat.st_blocks) * 512
                 let ext = Self.fileExtension(from: entryName)
                 let node = FileNode(
+                    inode: stat.st_ino,
                     name: entryName,
                     path: entryPath,
                     isDirectory: false,

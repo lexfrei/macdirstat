@@ -15,7 +15,7 @@ public struct TreemapView: View {
         self.renderer = renderer
     }
 
-    private var viewRootID: Int64? {
+    private var viewRootID: UInt64? {
         appState.currentViewRoot?.id
     }
 

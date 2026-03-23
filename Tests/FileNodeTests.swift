@@ -95,14 +95,16 @@ struct FileNodeTests {
         #expect(node.hashValue == node.hashValue)
     }
 
-    @Test func differentIDsAreNotEqual() {
+    @Test func differentInodesAreNotEqual() {
         let node1 = FileNode(
+            inode: 1001,
             name: "file.txt",
             path: "/tmp/file.txt",
             isDirectory: false,
             fileSize: 100
         )
         let node2 = FileNode(
+            inode: 1002,
             name: "file.txt",
             path: "/tmp/file.txt",
             isDirectory: false,

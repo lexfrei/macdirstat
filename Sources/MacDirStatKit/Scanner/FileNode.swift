@@ -1,15 +1,8 @@
 import Foundation
 
-/// Sequential ID generator — much faster than UUID() for millions of nodes.
-private let nextID = _NextID()
-private final class _NextID: @unchecked Sendable {
-    private let _value = UnsafeMutablePointer<Int64>.allocate(capacity: 1)
-    init() { _value.initialize(to: 0) }
-    func next() -> Int64 { OSAtomicIncrement64(_value) }
-}
-
 public final class FileNode: Sendable, Identifiable, Hashable {
-    public let id: Int64
+    /// Inode number from the filesystem — unique per volume, zero cost.
+    public let id: UInt64
     public let name: String
     public let path: String
     public let isDirectory: Bool
@@ -23,6 +16,7 @@ public final class FileNode: Sendable, Identifiable, Hashable {
     public var url: URL { URL(filePath: path) }
 
     public init(
+        inode: UInt64 = 0,
         name: String,
         path: String,
         isDirectory: Bool,
@@ -31,7 +25,7 @@ public final class FileNode: Sendable, Identifiable, Hashable {
         fileExtension: String = "",
         depth: Int = 0
     ) {
-        self.id = nextID.next()
+        self.id = inode
         self.name = name
         self.path = path
         self.isDirectory = isDirectory
