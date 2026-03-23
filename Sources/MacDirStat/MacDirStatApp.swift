@@ -10,11 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct MacDirStatApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @State private var appState = AppState()
+    @State private var multiTab = MultiTabState()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(appState: appState)
+            MultiTabView(multiTab: multiTab)
         }
     }
 }
