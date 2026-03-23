@@ -1,6 +1,21 @@
 import Darwin
 import Foundation
 
+private let scanLogEnabled = ProcessInfo.processInfo.environment["MACDIRSTAT_DEBUG"] != nil
+
+private let scanLog: FileHandle? = {
+    guard scanLogEnabled else { return nil }
+    let path = "/tmp/macdirstat-scan.log"
+    FileManager.default.createFile(atPath: path, contents: nil)
+    return FileHandle(forWritingAtPath: path)
+}()
+
+private func log(_ msg: String) {
+    guard scanLogEnabled else { return }
+    scanLog?.seekToEndOfFile()
+    scanLog?.write((msg + "\n").data(using: .utf8)!)
+}
+
 public protocol FileSystemScanning: Sendable {
     func scan(
         url: URL,
@@ -21,6 +36,7 @@ public struct FileManagerScanner: FileSystemScanning {
         progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         let path = url.path(percentEncoded: false)
+        log("SCAN_START: path=\(path)")
 
         let rootDevice: dev_t = try {
             var sb = stat()
@@ -29,6 +45,7 @@ public struct FileManagerScanner: FileSystemScanning {
             }
             return sb.st_dev
         }()
+        log("ROOT_DEV: \(rootDevice)")
 
         let state = ScanState()
         let intervalNs = progressIntervalMs * 1_000_000
@@ -39,6 +56,7 @@ public struct FileManagerScanner: FileSystemScanning {
             progressHandler: progressHandler)
 
         let snap = state.snapshot()
+        log("SCAN_DONE: items=\(snap.itemCount) skipped=\(snap.skippedDirs) rootSubtreeSize=\(root.subtreeSize) rootChildren=\(root.children?.count ?? -1)")
         await MainActor.run { progressHandler(snap.itemCount, "", snap.skippedDirs) }
         return root
     }
@@ -59,6 +77,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 return fts_open(&paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, nil)
             })
         else {
+            log("FTS_OPEN_FAILED: \(path)")
             state.incrementSkipped()
             return FileNode(
                 name: Self.lastName(from: path), path: path,
@@ -67,7 +86,11 @@ public struct FileManagerScanner: FileSystemScanning {
         defer { fts_close(fts) }
 
         var rootNode: FileNode?
-        var dirStack: [(path: String, children: [FileNode], depth: Int)] = []
+        var dirStack: [(path: String, children: [FileNode], depth: Int, level: Int)] = []
+        var infoHistogram: [UInt16: Int] = [:]
+        var totalFileSize: Int64 = 0
+        var ftsDPMatched = 0
+        var ftsDPSkipped = 0
 
         while let entry = fts_read(fts) {
             try Task.checkCancellation()
@@ -77,8 +100,9 @@ public struct FileManagerScanner: FileSystemScanning {
             let entryName = Self.lastName(from: entryPath)
             let statp = entry.pointee.fts_statp!.pointee
 
+            infoHistogram[info, default: 0] += 1
+
             // FTS_DP must ALWAYS reach the switch to pop dirStack.
-            // Only filter FTS_D (pre-order) and non-directory entries.
             let isFTSDP = (Int32(info) == FTS_DP)
 
             // Skip APFS system volume files (very large inodes)
@@ -103,14 +127,18 @@ public struct FileManagerScanner: FileSystemScanning {
 
             switch Int32(info) {
             case FTS_D:
-                dirStack.append((path: entryPath, children: [], depth: entryDepth))
+                let level = Int(entry.pointee.fts_level)
+                dirStack.append((path: entryPath, children: [], depth: entryDepth, level: level))
                 state.incrementItems()
 
             case FTS_DP:
-                // Only pop if this dir was pushed (skip FTS_DP for filtered dirs)
-                guard let top = dirStack.last, top.path == entryPath else {
+                // Pop by fts_level — firmlinks can change paths between FTS_D and FTS_DP
+                let level = Int(entry.pointee.fts_level)
+                guard let top = dirStack.last, top.level == level else {
+                    ftsDPSkipped += 1
                     continue
                 }
+                ftsDPMatched += 1
                 let current = dirStack.removeLast()
                 var sorted = current.children
                 sorted.sort { $0.subtreeSize > $1.subtreeSize }
@@ -125,12 +153,14 @@ public struct FileManagerScanner: FileSystemScanning {
 
                 if dirStack.isEmpty {
                     rootNode = dirNode
+                    log("ROOT_SET: \(entryPath) subtreeSize=\(dirNode.subtreeSize) children=\(sorted.count)")
                 } else {
                     dirStack[dirStack.count - 1].children.append(dirNode)
                 }
 
             case FTS_F:
                 let size = Int64(statp.st_size)
+                totalFileSize += size
                 let ext = Self.fileExtension(from: entryName)
                 let node = FileNode(
                     inode: statp.st_ino,
@@ -160,6 +190,9 @@ public struct FileManagerScanner: FileSystemScanning {
                 await MainActor.run { progressHandler(snap.itemCount, name, snap.skippedDirs) }
             }
         }
+
+        log("LOOP_END: rootNode=\(rootNode != nil) dirStack=\(dirStack.count) ftsDPMatched=\(ftsDPMatched) ftsDPSkipped=\(ftsDPSkipped) totalFileSize=\(totalFileSize)")
+        log("INFO_HIST: \(infoHistogram.sorted { $0.key < $1.key }.map { "\($0.key):\($0.value)" }.joined(separator: " "))")
 
         return rootNode ?? FileNode(
             name: Self.lastName(from: path), path: path,
