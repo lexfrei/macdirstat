@@ -76,6 +76,17 @@ struct ColorMapperTests {
         #expect(color != GoldenAngleColorMapper.noExtensionColor)
     }
 
+    @Test func djb2HashIsDeterministic() {
+        let hash1 = GoldenAngleColorMapper.djb2Hash("swift")
+        let hash2 = GoldenAngleColorMapper.djb2Hash("swift")
+        #expect(hash1 == hash2)
+        #expect(hash1 != 0)
+
+        let hashA = GoldenAngleColorMapper.djb2Hash("mp4")
+        let hashB = GoldenAngleColorMapper.djb2Hash("jpg")
+        #expect(hashA != hashB)
+    }
+
     @Test func withMappingIsImmutable() {
         let original = GoldenAngleColorMapper()
         let mapped = original.withMapping(from: makeTree())

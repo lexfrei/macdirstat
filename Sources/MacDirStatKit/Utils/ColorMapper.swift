@@ -64,9 +64,17 @@ public struct GoldenAngleColorMapper: Sendable {
                 brightness: brightness)
         }
 
-        let hash = abs(fileExtension.hashValue)
+        let hash = Self.djb2Hash(fileExtension)
         let hue = Double(hash % 360) / 360.0
         return Color(hue: hue, saturation: saturation * 0.5, brightness: brightness * 0.8)
+    }
+
+    static func djb2Hash(_ string: String) -> UInt {
+        var hash: UInt = 5381
+        for byte in string.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt(byte)
+        }
+        return hash
     }
 
     public func legend(for rootNode: FileNode) -> [ExtensionLegendEntry] {

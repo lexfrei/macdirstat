@@ -146,7 +146,7 @@ struct FailingScanner: FileSystemScanning {
 
     func scan(
         url: URL,
-        progressHandler: @escaping @MainActor @Sendable (Int, String) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         throw ScanError()
     }

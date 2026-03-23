@@ -8,6 +8,7 @@ public final class ScanProgress {
     public var currentPath: String = ""
     public var isScanning: Bool = false
     public var elapsedTime: TimeInterval = 0
+    public var skippedDirectories: Int = 0
 
     public init() {}
 
@@ -16,5 +17,6 @@ public final class ScanProgress {
         currentPath = ""
         isScanning = false
         elapsedTime = 0
+        skippedDirectories = 0
     }
 }

@@ -2,7 +2,15 @@
 
 Native macOS disk usage visualizer with squarified treemap. Scans directories and displays file sizes as colored rectangles where area is proportional to file size, colored by file extension.
 
-**Status**: Work in progress. Directory scanning, treemap visualization, and extension legend are implemented. Interactivity (hover, click, drill-down) is next.
+## Features
+
+- Recursive directory scanning with progress reporting
+- Squarified treemap visualization with Canvas rendering
+- Extension-based color mapping with golden angle distribution
+- Hover highlighting and click selection
+- Double-click drill-down with breadcrumb navigation
+- Directory tree sidebar with file sizes
+- Extension legend with color indicators
 
 ## Requirements
 

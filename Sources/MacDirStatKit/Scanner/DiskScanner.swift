@@ -1,8 +1,10 @@
 import Foundation
 
 public protocol FileSystemScanning: Sendable {
-    func scan(url: URL, progressHandler: @escaping @MainActor @Sendable (Int, String) -> Void) async throws
-        -> FileNode
+    func scan(
+        url: URL,
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
+    ) async throws -> FileNode
 }
 
 public struct FileManagerScanner: FileSystemScanning {
@@ -13,15 +15,21 @@ public struct FileManagerScanner: FileSystemScanning {
     }
 
     public func scan(
-        url: URL, progressHandler: @escaping @MainActor @Sendable (Int, String) -> Void
+        url: URL,
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         let resourceKeys: Set<URLResourceKey> = [
             .fileSizeKey, .isDirectoryKey, .totalFileAllocatedSizeKey,
         ]
         var fileCount = 0
+        var skippedDirs = 0
         let root = try await scanDirectory(
             url: url, depth: 0, resourceKeys: resourceKeys,
-            fileCount: &fileCount, progressHandler: progressHandler)
+            fileCount: &fileCount, skippedDirs: &skippedDirs,
+            progressHandler: progressHandler)
+        let finalCount = fileCount
+        let finalSkipped = skippedDirs
+        await MainActor.run { progressHandler(finalCount, "", finalSkipped) }
         return root
     }
 
@@ -30,7 +38,8 @@ public struct FileManagerScanner: FileSystemScanning {
         depth: Int,
         resourceKeys: Set<URLResourceKey>,
         fileCount: inout Int,
-        progressHandler: @escaping @MainActor @Sendable (Int, String) -> Void
+        skippedDirs: inout Int,
+        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
     ) async throws -> FileNode {
         let fm = FileManager.default
         let contents: [URL]
@@ -40,6 +49,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 options: []
             )
         } catch {
+            skippedDirs += 1
             return FileNode(
                 name: url.lastPathComponent, url: url, isDirectory: true,
                 fileSize: 0, children: [], depth: depth)
@@ -61,7 +71,8 @@ public struct FileManagerScanner: FileSystemScanning {
             if isDirectory {
                 let child = try await scanDirectory(
                     url: childURL, depth: depth + 1, resourceKeys: resourceKeys,
-                    fileCount: &fileCount, progressHandler: progressHandler)
+                    fileCount: &fileCount, skippedDirs: &skippedDirs,
+                    progressHandler: progressHandler)
                 children.append(child)
             } else {
                 let size = Int64(
@@ -72,15 +83,14 @@ public struct FileManagerScanner: FileSystemScanning {
                     isDirectory: false, fileSize: size,
                     fileExtension: ext, depth: depth + 1)
                 children.append(node)
-            }
-
-            if !isDirectory {
                 fileCount += 1
             }
+
             if fileCount > 0, fileCount % progressBatchSize == 0 {
                 let count = fileCount
                 let path = childURL.lastPathComponent
-                await MainActor.run { progressHandler(count, path) }
+                let skipped = skippedDirs
+                await MainActor.run { progressHandler(count, path, skipped) }
             }
         }
 

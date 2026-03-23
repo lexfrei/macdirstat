@@ -20,6 +20,7 @@ public final class AppState {
     public var colorMapper = GoldenAngleColorMapper()
 
     private var scanTask: Task<Void, Never>?
+    private var securityScopedURL: URL?
     public let scanner: any FileSystemScanning
 
     public init(scanner: any FileSystemScanning = FileManagerScanner()) {
@@ -28,6 +29,7 @@ public final class AppState {
 
     public func startScan(url: URL) {
         scanTask?.cancel()
+        stopSecurityScopedAccess()
         rootNode = nil
         scanError = nil
         selectedNode = nil
@@ -37,24 +39,29 @@ public final class AppState {
         scanProgress.isScanning = true
         selectedURL = url
 
+        if url.startAccessingSecurityScopedResource() {
+            securityScopedURL = url
+        }
+
         let scanner = self.scanner
         let startTime = Date()
 
         scanTask = Task {
             do {
-                let node = try await scanner.scan(url: url) { count, path in
+                let node = try await scanner.scan(url: url) { count, path, skipped in
                     self.scanProgress.filesScanned = count
                     self.scanProgress.currentPath = path
+                    self.scanProgress.skippedDirectories = skipped
                     self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
                 }
                 self.rootNode = node
                 self.colorMapper = self.colorMapper.withMapping(from: node)
-                self.scanProgress.filesScanned = self.countFiles(node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
-                // Scan was cancelled
+                self.stopSecurityScopedAccess()
             } catch {
                 self.scanError = error.localizedDescription
+                self.stopSecurityScopedAccess()
             }
             self.scanProgress.isScanning = false
         }
@@ -83,10 +90,8 @@ public final class AppState {
         selectedNode = nil
     }
 
-    private func countFiles(_ node: FileNode) -> Int {
-        if node.isDirectory {
-            return (node.children ?? []).reduce(0) { $0 + countFiles($1) }
-        }
-        return 1
+    private func stopSecurityScopedAccess() {
+        securityScopedURL?.stopAccessingSecurityScopedResource()
+        securityScopedURL = nil
     }
 }
