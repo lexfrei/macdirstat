@@ -25,6 +25,31 @@ public struct TreemapView: View {
                     hoveredNode: appState.hoveredNode,
                     selectedNode: appState.selectedNode)
             }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    appState.hoveredNode = nodeAt(point: location)
+                case .ended:
+                    appState.hoveredNode = nil
+                }
+            }
+            .onTapGesture(count: 2) { location in
+                if let node = nodeAt(point: location), node.isDirectory {
+                    appState.drillDown(into: node)
+                }
+            }
+            .onTapGesture { location in
+                appState.selectedNode = nodeAt(point: location)
+            }
+            .onKeyPress(.delete) {
+                appState.navigateUp()
+                return .handled
+            }
+            .onKeyPress(.escape) {
+                appState.selectedNode = nil
+                return .handled
+            }
+            .focusable()
             .onChange(of: geometry.size) { _, newSize in
                 currentSize = newSize
                 recomputeLayout(size: newSize)
@@ -40,6 +65,15 @@ public struct TreemapView: View {
                 recomputeLayout(size: geometry.size)
             }
         }
+    }
+
+    private func nodeAt(point: CGPoint) -> FileNode? {
+        for i in stride(from: cachedRects.count - 1, through: 0, by: -1) {
+            if cachedRects[i].frame.contains(point) {
+                return cachedRects[i].node
+            }
+        }
+        return nil
     }
 
     private func recomputeLayout(size: CGSize) {

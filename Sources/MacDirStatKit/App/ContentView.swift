@@ -12,7 +12,16 @@ public struct ContentView: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            detail
+            VStack(spacing: 0) {
+                if appState.rootNode != nil, !appState.scanProgress.isScanning {
+                    BreadcrumbView(
+                        rootName: appState.rootNode?.name ?? "Root",
+                        stack: appState.navigationStack,
+                        onSelectRoot: { appState.navigateTo(index: -1) },
+                        onSelect: { appState.navigateTo(index: $0) })
+                }
+                detail
+            }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -65,10 +74,7 @@ public struct ContentView: View {
             Divider()
 
             Section {
-                Text("No selection")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
+                FileInfoView(node: appState.selectedNode ?? appState.hoveredNode)
             } header: {
                 Text("File Info")
                     .font(.headline)
@@ -88,7 +94,9 @@ public struct ContentView: View {
             } else if let error = appState.scanError {
                 errorView(error)
             } else if appState.rootNode != nil {
-                TreemapView(appState: appState, renderer: TreemapRenderer(colorMapper: appState.colorMapper))
+                TreemapView(
+                    appState: appState,
+                    renderer: TreemapRenderer(colorMapper: appState.colorMapper))
             } else {
                 emptyState
             }
@@ -168,22 +176,28 @@ public struct ContentView: View {
                     .foregroundStyle(.green)
                 Text("\(appState.scanProgress.filesScanned) files")
                     .monospacedDigit()
-                Text("·")
                 Text(SizeFormatter.format(root.subtreeSize))
-                Text("·")
+                    .foregroundStyle(.secondary)
                 Text(String(format: "%.1fs", appState.scanProgress.elapsedTime))
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
-            } else if let url = appState.selectedURL {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(.secondary)
-                Text(url.lastPathComponent)
-                    .foregroundStyle(.secondary)
+
+                if let hovered = appState.hoveredNode {
+                    Divider()
+                        .frame(height: 12)
+                    Text(hovered.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(SizeFormatter.format(hovered.subtreeSize))
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("Ready")
                     .foregroundStyle(.secondary)
             }
             Spacer()
         }
+        .font(.caption)
         .padding(.horizontal)
         .padding(.vertical, 4)
         .background(.bar)
