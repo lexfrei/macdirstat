@@ -113,6 +113,7 @@ public struct FileManagerScanner: FileSystemScanning {
             case FTS_D:
                 // Entering directory — push onto stack
                 dirStack.append((path: entryPath, children: [], depth: entryDepth))
+                state.incrementItems()
 
             case FTS_DP:
                 // Leaving directory — build node from accumulated children

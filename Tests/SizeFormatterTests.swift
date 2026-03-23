@@ -52,6 +52,12 @@ struct SizeFormatterTests {
         #expect(SizeFormatter.format(2_500_000) == "2.5 MB")
     }
 
+    @Test func roundingEdgeCase() {
+        // 999999 should round to 1.0 MB, not "1000.0 KB"
+        #expect(SizeFormatter.format(999_999) == "1.0 MB")
+        #expect(SizeFormatter.format(999_999_999) == "1.0 GB")
+    }
+
     @Test func finderConsistency() {
         // Finder shows 1 GB = 1,000,000,000 bytes (SI base-10)
         #expect(SizeFormatter.format(1_000_000_000) == "1.0 GB")

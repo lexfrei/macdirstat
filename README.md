@@ -41,6 +41,8 @@ Create a standalone .app bundle:
 open MacDirStat.app
 ```
 
+For full volume scans, grant Full Disk Access: System Settings > Privacy & Security > Full Disk Access. Without it, protected directories will be skipped silently.
+
 Note: use `make test` instead of bare `swift test` — the Swift Testing framework in Command Line Tools requires explicit framework search paths provided by the Makefile.
 
 ## License

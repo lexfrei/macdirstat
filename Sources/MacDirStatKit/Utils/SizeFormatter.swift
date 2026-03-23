@@ -14,7 +14,7 @@ public enum SizeFormatter {
         var value = Double(absBytes)
         var unitIndex = 0
 
-        while value >= 1000, unitIndex < units.count - 1 {
+        while value >= 999.95, unitIndex < units.count - 1 {
             value /= 1000
             unitIndex += 1
         }
