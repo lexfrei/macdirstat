@@ -23,7 +23,8 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
 
         let context = WatcherContext()
         context.onEvent = { [weak self] paths in
-            self?.queue.async { self?.handleEventsInternal(paths: paths) }
+            guard let self else { return }
+            self.queue.async { [weak self] in self?.handleEventsInternal(paths: paths) }
         }
 
         let retained = Unmanaged.passRetained(context)

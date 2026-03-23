@@ -105,8 +105,12 @@ public final class AppState {
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                if let msg = errorMsg { self.scanError = msg }
-                if let url = self.selectedURL { self.rescan(url: url) }
+                if let msg = errorMsg {
+                    self.scanError = msg
+                    // Don't rescan on error — user needs to see the error
+                } else if let url = self.selectedURL {
+                    self.rescan(url: url)
+                }
             }
         }
     }

@@ -212,7 +212,6 @@ private final class ScanState: @unchecked Sendable {
 
     var itemCount: Int { lock.withLock { _itemCount } }
     var skippedDirs: Int { lock.withLock { _skippedDirs } }
-    var lastProgressTime: UInt64 { lock.withLock { _lastProgressTime } }
 
     func incrementItems() { lock.withLock { _itemCount += 1 } }
     func incrementSkipped() { lock.withLock { _skippedDirs += 1 } }
