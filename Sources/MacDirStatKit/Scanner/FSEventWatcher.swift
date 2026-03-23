@@ -18,8 +18,10 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     public func start(paths: [String], handler: @escaping @Sendable ([String]) -> Void) {
-        stop()
-        self.handler = handler
+        queue.sync {
+            stopInternal()
+            self.handler = handler
+        }
 
         var context = FSEventStreamContext()
         context.info = Unmanaged.passUnretained(self).toOpaque()
@@ -34,36 +36,41 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
         }
 
         let pathsToWatch = paths as CFArray
-        stream = FSEventStreamCreate(
+        let newStream = FSEventStreamCreate(
             nil, callback, &context, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             debounceInterval,
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents))
 
-        if let stream = stream {
-            FSEventStreamSetDispatchQueue(stream, queue)
-            FSEventStreamStart(stream)
+        queue.sync {
+            self.stream = newStream
+            if let stream = newStream {
+                FSEventStreamSetDispatchQueue(stream, self.queue)
+                FSEventStreamStart(stream)
+            }
         }
     }
 
     private func handleEvents(paths: [String]) {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            self.pendingPaths.formUnion(paths)
-            self.debounceWork?.cancel()
+        // Already on self.queue (set via FSEventStreamSetDispatchQueue)
+        pendingPaths.formUnion(paths)
+        debounceWork?.cancel()
 
-            let work = DispatchWorkItem { [weak self] in
-                guard let self = self else { return }
-                let paths = Array(self.pendingPaths)
-                self.pendingPaths.removeAll()
-                self.handler?(paths)
-            }
-            self.debounceWork = work
-            self.queue.asyncAfter(deadline: .now() + self.debounceInterval, execute: work)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let paths = Array(self.pendingPaths)
+            self.pendingPaths.removeAll()
+            self.handler?(paths)
         }
+        debounceWork = work
+        queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
     }
 
     public func stop() {
+        queue.sync { stopInternal() }
+    }
+
+    private func stopInternal() {
         if let stream = stream {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
@@ -77,6 +84,6 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     deinit {
-        stop()
+        stopInternal()
     }
 }

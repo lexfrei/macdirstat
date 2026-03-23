@@ -7,6 +7,8 @@ public struct TreemapView: View {
 
     @State private var cachedRects: [LayoutRect] = []
     @State private var currentSize: CGSize = .zero
+    @State private var dragStartOffset: CGSize = .zero
+    @State private var zoomBase: CGFloat = 1.0
 
     public init(appState: AppState, renderer: TreemapRenderer) {
         self.appState = appState
@@ -20,10 +22,6 @@ public struct TreemapView: View {
     public var body: some View {
         GeometryReader { geometry in
             Canvas { context, size in
-                let scaledSize = CGSize(
-                    width: size.width * appState.zoomScale,
-                    height: size.height * appState.zoomScale)
-
                 context.translateBy(x: appState.panOffset.width, y: appState.panOffset.height)
                 context.scaleBy(x: appState.zoomScale, y: appState.zoomScale)
 
@@ -57,8 +55,11 @@ public struct TreemapView: View {
                     .onChanged { value in
                         let newScale = max(
                             AppState.minZoom,
-                            min(AppState.maxZoom, appState.zoomScale * value.magnification))
+                            min(AppState.maxZoom, zoomBase * value.magnification))
                         appState.zoomScale = newScale
+                    }
+                    .onEnded { _ in
+                        zoomBase = appState.zoomScale
                     }
             )
             .gesture(
@@ -66,11 +67,11 @@ public struct TreemapView: View {
                     .onChanged { value in
                         guard appState.zoomScale > 1.0 else { return }
                         appState.panOffset = CGSize(
-                            width: value.translation.width,
-                            height: value.translation.height)
+                            width: dragStartOffset.width + value.translation.width,
+                            height: dragStartOffset.height + value.translation.height)
                     }
                     .onEnded { _ in
-                        // Keep the current offset
+                        dragStartOffset = appState.panOffset
                     }
             )
             .onKeyPress(.delete) {
@@ -81,6 +82,8 @@ public struct TreemapView: View {
                 appState.selectedNode = nil
                 appState.zoomScale = 1.0
                 appState.panOffset = .zero
+                dragStartOffset = .zero
+                zoomBase = 1.0
                 return .handled
             }
             .contextMenu {
@@ -112,13 +115,11 @@ public struct TreemapView: View {
                 recomputeLayout(size: newSize)
             }
             .onChange(of: viewRootID) { _, _ in
-                appState.zoomScale = 1.0
-                appState.panOffset = .zero
+                resetZoomState()
                 recomputeLayout(size: currentSize)
             }
             .onChange(of: appState.rootNode?.id) { _, _ in
-                appState.zoomScale = 1.0
-                appState.panOffset = .zero
+                resetZoomState()
                 recomputeLayout(size: currentSize)
             }
             .onAppear {
@@ -126,6 +127,13 @@ public struct TreemapView: View {
                 recomputeLayout(size: geometry.size)
             }
         }
+    }
+
+    private func resetZoomState() {
+        appState.zoomScale = 1.0
+        appState.panOffset = .zero
+        dragStartOffset = .zero
+        zoomBase = 1.0
     }
 
     private func adjustedPoint(_ point: CGPoint) -> CGPoint {
