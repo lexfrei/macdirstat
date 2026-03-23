@@ -77,14 +77,18 @@ public struct FileManagerScanner: FileSystemScanning {
             let entryName = Self.lastName(from: entryPath)
             let statp = entry.pointee.fts_statp!.pointee
 
+            // FTS_DP must ALWAYS reach the switch to pop dirStack.
+            // Only filter FTS_D (pre-order) and non-directory entries.
+            let isFTSDP = (Int32(info) == FTS_DP)
+
             // Skip APFS system volume files (very large inodes)
-            if statp.st_ino > Self.systemVolumeInodeThreshold {
+            if !isFTSDP, statp.st_ino > Self.systemVolumeInodeThreshold {
                 if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
                 continue
             }
 
             // Skip different devices
-            if statp.st_dev != rootDevice {
+            if !isFTSDP, statp.st_dev != rootDevice {
                 if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
                 state.incrementSkipped()
                 continue
@@ -103,7 +107,11 @@ public struct FileManagerScanner: FileSystemScanning {
                 state.incrementItems()
 
             case FTS_DP:
-                guard let current = dirStack.popLast() else { continue }
+                // Only pop if this dir was pushed (skip FTS_DP for filtered dirs)
+                guard let top = dirStack.last, top.path == entryPath else {
+                    continue
+                }
+                let current = dirStack.removeLast()
                 var sorted = current.children
                 sorted.sort { $0.subtreeSize > $1.subtreeSize }
                 let dirNode = FileNode(
