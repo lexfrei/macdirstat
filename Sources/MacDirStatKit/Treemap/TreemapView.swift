@@ -20,6 +20,13 @@ public struct TreemapView: View {
     public var body: some View {
         GeometryReader { geometry in
             Canvas { context, size in
+                let scaledSize = CGSize(
+                    width: size.width * appState.zoomScale,
+                    height: size.height * appState.zoomScale)
+
+                context.translateBy(x: appState.panOffset.width, y: appState.panOffset.height)
+                context.scaleBy(x: appState.zoomScale, y: appState.zoomScale)
+
                 renderer.draw(
                     context: &context,
                     rects: cachedRects,
@@ -29,25 +36,51 @@ public struct TreemapView: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location):
-                    appState.hoveredNode = nodeAt(point: location)
+                    let adjusted = adjustedPoint(location)
+                    appState.hoveredNode = nodeAt(point: adjusted)
                 case .ended:
                     appState.hoveredNode = nil
                 }
             }
             .onTapGesture(count: 2) { location in
-                if let node = nodeAt(point: location), node.isDirectory {
+                let adjusted = adjustedPoint(location)
+                if let node = nodeAt(point: adjusted), node.isDirectory {
                     appState.drillDown(into: node)
                 }
             }
             .onTapGesture { location in
-                appState.selectedNode = nodeAt(point: location)
+                let adjusted = adjustedPoint(location)
+                appState.selectedNode = nodeAt(point: adjusted)
             }
+            .gesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        let newScale = max(
+                            AppState.minZoom,
+                            min(AppState.maxZoom, appState.zoomScale * value.magnification))
+                        appState.zoomScale = newScale
+                    }
+            )
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        guard appState.zoomScale > 1.0 else { return }
+                        appState.panOffset = CGSize(
+                            width: value.translation.width,
+                            height: value.translation.height)
+                    }
+                    .onEnded { _ in
+                        // Keep the current offset
+                    }
+            )
             .onKeyPress(.delete) {
                 appState.navigateUp()
                 return .handled
             }
             .onKeyPress(.escape) {
                 appState.selectedNode = nil
+                appState.zoomScale = 1.0
+                appState.panOffset = .zero
                 return .handled
             }
             .contextMenu {
@@ -79,9 +112,13 @@ public struct TreemapView: View {
                 recomputeLayout(size: newSize)
             }
             .onChange(of: viewRootID) { _, _ in
+                appState.zoomScale = 1.0
+                appState.panOffset = .zero
                 recomputeLayout(size: currentSize)
             }
             .onChange(of: appState.rootNode?.id) { _, _ in
+                appState.zoomScale = 1.0
+                appState.panOffset = .zero
                 recomputeLayout(size: currentSize)
             }
             .onAppear {
@@ -89,6 +126,12 @@ public struct TreemapView: View {
                 recomputeLayout(size: geometry.size)
             }
         }
+    }
+
+    private func adjustedPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(
+            x: (point.x - appState.panOffset.width) / appState.zoomScale,
+            y: (point.y - appState.panOffset.height) / appState.zoomScale)
     }
 
     private func nodeAt(point: CGPoint) -> FileNode? {

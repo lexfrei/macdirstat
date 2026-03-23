@@ -19,6 +19,11 @@ public final class AppState {
 
     public var colorMapper = GoldenAngleColorMapper()
     public var isLiveWatching = false
+    public var zoomScale: CGFloat = 1.0
+    public var panOffset: CGSize = .zero
+
+    public static let minZoom: CGFloat = 1.0
+    public static let maxZoom: CGFloat = 10.0
 
     private var scanTask: Task<Void, Never>?
     private var securityScopedURL: URL?
