@@ -59,8 +59,9 @@ public final class AppState {
 
         scanTask = Task {
             do {
-                let node = try await scanner.scan(url: url) { count, path, skipped in
+                let node = try await scanner.scan(url: url) { count, total, path, skipped in
                     self.scanProgress.filesScanned = count
+                    self.scanProgress.totalEstimatedItems = total
                     self.scanProgress.currentPath = path
                     self.scanProgress.skippedDirectories = skipped
                     self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
@@ -167,8 +168,9 @@ public final class AppState {
 
         scanTask = Task {
             do {
-                let node = try await scanner.scan(url: url) { count, path, skipped in
+                let node = try await scanner.scan(url: url) { count, total, path, skipped in
                     self.scanProgress.filesScanned = count
+                    self.scanProgress.totalEstimatedItems = total
                     self.scanProgress.currentPath = path
                     self.scanProgress.skippedDirectories = skipped
                     self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)

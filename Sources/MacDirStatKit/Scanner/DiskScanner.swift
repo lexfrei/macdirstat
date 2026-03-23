@@ -1,9 +1,10 @@
+import Darwin
 import Foundation
 
 public protocol FileSystemScanning: Sendable {
     func scan(
         url: URL,
-        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
     ) async throws -> FileNode
 }
 
@@ -16,7 +17,7 @@ public struct FileManagerScanner: FileSystemScanning {
 
     public func scan(
         url: URL,
-        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
     ) async throws -> FileNode {
         let resourceKeys: Set<URLResourceKey> = [
             .fileSizeKey, .isDirectoryKey, .totalFileAllocatedSizeKey,
@@ -27,19 +28,34 @@ public struct FileManagerScanner: FileSystemScanning {
         let rootVolumeID = try url.resourceValues(forKeys: [.volumeIdentifierKey])
             .volumeIdentifier as? NSObject
 
+        let estimatedTotal = Self.estimatedItemCount(
+            at: url.path(percentEncoded: false))
+
         let state = ScanState()
         let intervalNs = progressIntervalMs * 1_000_000
+
+        // Report initial estimate
+        await MainActor.run { progressHandler(0, estimatedTotal, "", 0) }
 
         let root = try await scanDirectory(
             url: url, depth: 0, resourceKeys: resourceKeys,
             rootVolumeID: rootVolumeID, state: state,
+            estimatedTotal: estimatedTotal,
             progressIntervalNs: intervalNs,
             progressHandler: progressHandler)
 
         await MainActor.run {
-            progressHandler(state.itemCount, "", state.skippedDirs)
+            progressHandler(state.itemCount, estimatedTotal, "", state.skippedDirs)
         }
         return root
+    }
+
+    /// Get estimated number of used inodes on the volume via statfs.
+    private static func estimatedItemCount(at path: String) -> Int {
+        let buf = UnsafeMutablePointer<statfs>.allocate(capacity: 1)
+        defer { buf.deallocate() }
+        guard path.withCString({ statfs($0, buf) }) == 0 else { return 0 }
+        return Int(buf.pointee.f_files) - Int(buf.pointee.f_ffree)
     }
 
     private func scanDirectory(
@@ -48,8 +64,9 @@ public struct FileManagerScanner: FileSystemScanning {
         resourceKeys: Set<URLResourceKey>,
         rootVolumeID: NSObject?,
         state: ScanState,
+        estimatedTotal: Int,
         progressIntervalNs: UInt64,
-        progressHandler: @escaping @MainActor @Sendable (Int, String, Int) -> Void
+        progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
     ) async throws -> FileNode {
         let fm = FileManager.default
         let contents: [URL]
@@ -94,6 +111,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 let child = try await scanDirectory(
                     url: childURL, depth: depth + 1, resourceKeys: resourceKeys,
                     rootVolumeID: rootVolumeID, state: state,
+                    estimatedTotal: estimatedTotal,
                     progressIntervalNs: progressIntervalNs,
                     progressHandler: progressHandler)
                 children.append(child)
@@ -115,7 +133,8 @@ public struct FileManagerScanner: FileSystemScanning {
                 let count = state.itemCount
                 let path = childURL.lastPathComponent
                 let skipped = state.skippedDirs
-                await MainActor.run { progressHandler(count, path, skipped) }
+                let total = estimatedTotal
+                await MainActor.run { progressHandler(count, total, path, skipped) }
             }
         }
 

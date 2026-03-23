@@ -136,28 +136,43 @@ public struct ContentView: View {
     }
 
     private var scanProgressView: some View {
-        VStack(spacing: 16) {
+        let progress = appState.scanProgress
+        return VStack(spacing: 16) {
             Spacer()
-            ProgressView()
-                .controlSize(.large)
+
+            if progress.totalEstimatedItems > 0 {
+                ProgressView(value: progress.fractionComplete)
+                    .frame(maxWidth: 300)
+                Text(
+                    String(
+                        format: "%.0f%%",
+                        progress.fractionComplete * 100)
+                )
+                .font(.title)
+                .monospacedDigit()
+            } else {
+                ProgressView()
+                    .controlSize(.large)
+            }
+
             Text("Scanning...")
                 .font(.title2)
-            Text("\(appState.scanProgress.filesScanned) items")
+            Text("\(progress.filesScanned) items")
                 .font(.headline)
                 .monospacedDigit()
-            if appState.scanProgress.skippedDirectories > 0 {
-                Text("\(appState.scanProgress.skippedDirectories) skipped")
+            if progress.skippedDirectories > 0 {
+                Text("\(progress.skippedDirectories) skipped")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Text(appState.scanProgress.currentPath)
+            Text(progress.currentPath)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: 400)
             TimelineView(.periodic(from: .now, by: 1)) { _ in
-                Text(String(format: "%.0fs", appState.scanProgress.elapsedTime))
+                Text(String(format: "%.0fs", progress.elapsedTime))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()

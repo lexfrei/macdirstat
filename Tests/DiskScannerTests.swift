@@ -23,7 +23,7 @@ struct DiskScannerTests {
         let dir = try createTempDir()
         defer { cleanup(dir) }
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         #expect(root.isDirectory == true)
         #expect(root.children?.isEmpty == true)
         #expect(root.subtreeSize == 0)
@@ -38,7 +38,7 @@ struct DiskScannerTests {
         try data100.write(to: dir.appendingPathComponent("small.txt"))
         try data200.write(to: dir.appendingPathComponent("large.png"))
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         #expect(root.isDirectory == true)
         #expect(root.children?.count == 2)
         #expect(root.subtreeSize > 0)
@@ -58,7 +58,7 @@ struct DiskScannerTests {
         let data = Data(repeating: 0x44, count: 500)
         try data.write(to: subDir.appendingPathComponent("nested.txt"))
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         #expect(root.children?.count == 1)
 
         let sub = root.children?.first
@@ -76,7 +76,7 @@ struct DiskScannerTests {
         try data.write(to: dir.appendingPathComponent("file.SWIFT"))
         try data.write(to: dir.appendingPathComponent("noext"))
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         let extensions = Set(root.children?.map(\.fileExtension) ?? [])
         #expect(extensions.contains("swift"))
         #expect(extensions.contains(""))
@@ -93,7 +93,7 @@ struct DiskScannerTests {
         try Data(repeating: 0x03, count: 1000).write(
             to: dir.appendingPathComponent("medium.txt"))
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         let sizes = root.children?.map(\.subtreeSize) ?? []
         #expect(sizes == sizes.sorted(by: >))
     }
@@ -108,7 +108,7 @@ struct DiskScannerTests {
         try data.write(to: dir.appendingPathComponent("c.txt"))
 
         var progressCounts: [Int] = []
-        let root = try await scanner.scan(url: dir) { count, _, _ in
+        let root = try await scanner.scan(url: dir) { count, _, _, _ in
             progressCounts.append(count)
         }
         #expect(root.children?.count == 3)
@@ -125,7 +125,7 @@ struct DiskScannerTests {
         let data = Data(repeating: 0x47, count: 10)
         try data.write(to: subDir.appendingPathComponent("file.txt"))
 
-        let root = try await scanner.scan(url: dir) { _, _, _ in }
+        let root = try await scanner.scan(url: dir) { _, _, _, _ in }
         #expect(root.depth == 0)
         #expect(root.children?.first?.depth == 1)
         #expect(root.children?.first?.children?.first?.depth == 2)
