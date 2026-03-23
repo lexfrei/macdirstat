@@ -18,9 +18,11 @@ public final class AppState {
     }
 
     public var colorMapper = GoldenAngleColorMapper()
+    public var isLiveWatching = false
 
     private var scanTask: Task<Void, Never>?
     private var securityScopedURL: URL?
+    private let watcher = FSEventWatcher(debounceInterval: 0.5)
     public let scanner: any FileSystemScanning
 
     public init(scanner: any FileSystemScanning = FileManagerScanner()) {
@@ -88,6 +90,56 @@ public final class AppState {
         guard index < navigationStack.count else { return }
         navigationStack = Array(navigationStack.prefix(index + 1))
         selectedNode = nil
+    }
+
+    public func toggleLiveWatching() {
+        if isLiveWatching {
+            stopLiveWatching()
+        } else {
+            startLiveWatching()
+        }
+    }
+
+    private func startLiveWatching() {
+        guard let url = selectedURL, rootNode != nil else { return }
+        isLiveWatching = true
+        watcher.start(paths: [url.path(percentEncoded: false)]) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.isLiveWatching,
+                    !self.scanProgress.isScanning,
+                    let url = self.selectedURL
+                else { return }
+                self.rescan(url: url)
+            }
+        }
+    }
+
+    private func stopLiveWatching() {
+        isLiveWatching = false
+        watcher.stop()
+    }
+
+    private func rescan(url: URL) {
+        scanProgress.isScanning = true
+        let scanner = self.scanner
+        let startTime = Date()
+
+        scanTask = Task {
+            do {
+                let node = try await scanner.scan(url: url) { count, path, skipped in
+                    self.scanProgress.filesScanned = count
+                    self.scanProgress.currentPath = path
+                    self.scanProgress.skippedDirectories = skipped
+                    self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+                }
+                self.rootNode = node
+                self.colorMapper = self.colorMapper.withMapping(from: node)
+                self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+            } catch {
+                // Rescan failed silently — keep existing tree
+            }
+            self.scanProgress.isScanning = false
+        }
     }
 
     private func stopSecurityScopedAccess() {

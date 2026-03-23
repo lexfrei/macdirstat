@@ -30,6 +30,21 @@ public struct ContentView: View {
                 }
                 .disabled(appState.scanProgress.isScanning)
             }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    appState.toggleLiveWatching()
+                } label: {
+                    Label(
+                        appState.isLiveWatching ? "Live" : "Watch",
+                        systemImage: appState.isLiveWatching
+                            ? "eye.fill" : "eye")
+                }
+                .disabled(appState.rootNode == nil)
+                .help(
+                    appState.isLiveWatching
+                        ? "Stop watching for changes"
+                        : "Watch for filesystem changes")
+            }
         }
         .fileImporter(
             isPresented: $appState.isPickerPresented,
