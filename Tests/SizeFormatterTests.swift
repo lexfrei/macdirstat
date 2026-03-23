@@ -42,7 +42,9 @@ struct SizeFormatterTests {
     }
 
     @Test func negativeValues() {
-        #expect(SizeFormatter.format(-1) == "0 B")
+        #expect(SizeFormatter.format(-1) == "-1 B")
+        #expect(SizeFormatter.format(-1500) == "-1.5 KB")
+        #expect(SizeFormatter.format(-1_000_000) == "-1.0 MB")
     }
 
     @Test func fractionalDisplay() {

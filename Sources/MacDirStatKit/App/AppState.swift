@@ -59,6 +59,9 @@ public final class AppState {
         navigationStack = []
         scanProgress.reset()
         scanProgress.isScanning = true
+        // statfs inode estimate is only accurate for volume root scans
+        let path = url.path(percentEncoded: false)
+        scanProgress.isVolumeRootScan = (path == "/" || path.hasPrefix("/Volumes/"))
         selectedURL = url
 
         if url.startAccessingSecurityScopedResource() {
@@ -170,23 +173,26 @@ public final class AppState {
         scanTask = Task { [weak self] in
             do {
                 let node = try await scanner.scan(url: url) { [weak self] count, total, path, skipped in
-                    self?.scanProgress.filesScanned = count
-                    self?.scanProgress.totalEstimatedItems = total
-                    self?.scanProgress.currentPath = path
-                    self?.scanProgress.skippedDirectories = skipped
-                    self?.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+                    guard let self else { return }
+                    self.scanProgress.filesScanned = count
+                    self.scanProgress.totalEstimatedItems = total
+                    self.scanProgress.currentPath = path
+                    self.scanProgress.skippedDirectories = skipped
+                    self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
                 }
-                self?.rootNode = node
-                self?.colorMapper = self?.colorMapper.withMapping(from: node) ?? GoldenAngleColorMapper()
-                self?.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
+                guard let self else { return }
+                self.rootNode = node
+                self.colorMapper = self.colorMapper.withMapping(from: node)
+                self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
                 // Scan cancelled
             } catch {
                 self?.scanError = error.localizedDescription
             }
-            self?.scanProgress.isScanning = false
+            guard let self else { return }
+            self.scanProgress.isScanning = false
             if releaseSecurityScope {
-                self?.stopSecurityScopedAccess()
+                self.stopSecurityScopedAccess()
             }
         }
     }

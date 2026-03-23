@@ -2,13 +2,16 @@ public enum SizeFormatter {
     private static let units = ["B", "KB", "MB", "GB", "TB", "PB"]
 
     public static func format(_ bytes: Int64) -> String {
-        guard bytes > 0 else { return "0 B" }
+        if bytes == 0 { return "0 B" }
 
-        if bytes < 1000 {
-            return "\(bytes) B"
+        let negative = bytes < 0
+        let absBytes = abs(bytes)
+
+        if absBytes < 1000 {
+            return negative ? "-\(absBytes) B" : "\(absBytes) B"
         }
 
-        var value = Double(bytes)
+        var value = Double(absBytes)
         var unitIndex = 0
 
         while value >= 1000, unitIndex < units.count - 1 {
@@ -16,6 +19,7 @@ public enum SizeFormatter {
             unitIndex += 1
         }
 
-        return String(format: "%.1f %@", value, units[unitIndex])
+        let formatted = String(format: "%.1f %@", value, units[unitIndex])
+        return negative ? "-\(formatted)" : formatted
     }
 }

@@ -100,4 +100,21 @@ struct ScanSnapshotTests {
         #expect(loaded.tree.name == "root")
         #expect(loaded.tree.children?.count == 1)
     }
+
+    @Test func loadFromNonexistentFileThrows() {
+        let bogus = URL(filePath: "/tmp/nonexistent-\(UUID().uuidString).json")
+        #expect(throws: (any Error).self) {
+            _ = try ScanSnapshot.load(from: bogus)
+        }
+    }
+
+    @Test func loadCorruptedDataThrows() throws {
+        let tempFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corrupt-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+        try Data("not json".utf8).write(to: tempFile)
+        #expect(throws: (any Error).self) {
+            _ = try ScanSnapshot.load(from: tempFile)
+        }
+    }
 }

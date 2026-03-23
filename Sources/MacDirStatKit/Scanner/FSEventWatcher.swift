@@ -100,6 +100,7 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 }
 
-private final class WatcherContext {
+private final class WatcherContext: @unchecked Sendable {
+    // Set once before FSEventStreamStart, read-only during callbacks
     var onEvent: (([String]) -> Void)?
 }

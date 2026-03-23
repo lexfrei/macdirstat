@@ -17,7 +17,7 @@ Native macOS disk usage visualizer with squarified treemap. Scans directories an
 - File deletion (Move to Trash with confirmation)
 - Multi-tab scanning with volume discovery
 - Context menu: Reveal in Finder, Copy Path
-- Stays on same volume (skips network mounts and external drives)
+- Stays on same volume (does not cross filesystem boundaries)
 - Physical on-disk size (iCloud-evicted files show as 0 bytes — they occupy no local disk space)
 
 ## Requirements

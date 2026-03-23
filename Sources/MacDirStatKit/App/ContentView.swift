@@ -134,16 +134,12 @@ public struct ContentView: View {
         return VStack(spacing: 16) {
             Spacer()
 
-            if progress.totalEstimatedItems > 0 {
-                ProgressView(value: progress.fractionComplete)
+            if let fraction = progress.fractionComplete {
+                ProgressView(value: fraction)
                     .frame(maxWidth: 300)
-                Text(
-                    String(
-                        format: "%.0f%%",
-                        progress.fractionComplete * 100)
-                )
-                .font(.title)
-                .monospacedDigit()
+                Text(String(format: "%.0f%%", fraction * 100))
+                    .font(.title)
+                    .monospacedDigit()
             } else {
                 ProgressView()
                     .controlSize(.large)
