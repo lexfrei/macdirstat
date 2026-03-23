@@ -1,5 +1,5 @@
-import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct ContentView: View {
     @Bindable var appState: AppState
@@ -17,8 +17,16 @@ public struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Open", systemImage: "folder") {
-                    openFolder()
+                    appState.isPickerPresented = true
                 }
+            }
+        }
+        .fileImporter(
+            isPresented: $appState.isPickerPresented,
+            allowedContentTypes: [.folder]
+        ) { result in
+            if case .success(let url) = result {
+                appState.selectedURL = url
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -79,17 +87,30 @@ public struct ContentView: View {
 
     private var detail: some View {
         VStack {
-            Spacer()
-            Image(systemName: "folder.badge.questionmark")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
-            Text("Select a folder to scan")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text("Use the Open button in the toolbar")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            Spacer()
+            if let url = appState.selectedURL {
+                Spacer()
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.blue)
+                Text("Ready to scan")
+                    .font(.title2)
+                Text(url.path(percentEncoded: false))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            } else {
+                Spacer()
+                Image(systemName: "folder.badge.questionmark")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.secondary)
+                Text("Select a folder to scan")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Use the Open button in the toolbar")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -98,28 +119,20 @@ public struct ContentView: View {
 
     private var statusBar: some View {
         HStack {
-            Text("Ready")
-                .foregroundStyle(.secondary)
+            if let url = appState.selectedURL {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(.secondary)
+                Text(url.lastPathComponent)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Ready")
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
-    }
-
-    // MARK: - Actions
-
-    private func openFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.message = "Select a folder to scan"
-        panel.prompt = "Scan"
-
-        if panel.runModal() == .OK {
-            appState.selectedURL = panel.url
-        }
     }
 }

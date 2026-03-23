@@ -4,7 +4,7 @@ import SwiftUI
 @Observable
 public final class AppState {
     public var selectedURL: URL?
-    public var rootNode: (any Identifiable)?
+    public var isPickerPresented = false
 
     public init() {}
 }
