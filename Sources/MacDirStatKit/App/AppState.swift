@@ -59,16 +59,18 @@ public final class AppState {
         navigationStack = []
         scanProgress.reset()
         scanProgress.isScanning = true
-        // statfs inode estimate is only accurate for volume root scans
+        // statfs inode estimate is only accurate when scanning a volume root
         let path = url.path(percentEncoded: false)
-        scanProgress.isVolumeRootScan = (path == "/" || path.hasPrefix("/Volumes/"))
+        scanProgress.isVolumeRootScan = Self.isVolumeRoot(path: path)
         selectedURL = url
 
         if url.startAccessingSecurityScopedResource() {
             securityScopedURL = url
         }
 
-        Permissions.preTriggerIfNeeded(scanPath: url.path(percentEncoded: false))
+        // Pre-trigger TCC dialogs in background to avoid blocking UI
+        let scanPath = url.path(percentEncoded: false)
+        Task.detached { Permissions.preTriggerIfNeeded(scanPath: scanPath) }
 
         runScan(url: url, releaseSecurityScope: true)
     }
@@ -195,6 +197,13 @@ public final class AppState {
                 self.stopSecurityScopedAccess()
             }
         }
+    }
+
+    static func isVolumeRoot(path: String) -> Bool {
+        let volumes = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: nil, options: []) ?? []
+        return volumes.contains { $0.path(percentEncoded: false) == path
+            || $0.path(percentEncoded: false) == path + "/" }
     }
 
     private func stopSecurityScopedAccess() {

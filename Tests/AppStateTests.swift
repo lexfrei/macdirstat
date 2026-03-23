@@ -52,6 +52,15 @@ struct AppStateTests {
         #expect(state.currentViewRoot?.id == dir.id)
     }
 
+    @Test @MainActor func scanErrorSetsErrorMessage() async throws {
+        let state = AppState(scanner: FailingScanner())
+        state.startScan(url: URL(filePath: "/tmp"))
+        // Wait for scan task to complete
+        try await Task.sleep(for: .seconds(2))
+        #expect(state.scanError != nil)
+        #expect(state.scanProgress.isScanning == false)
+    }
+
     @Test @MainActor func drillDownIgnoresFiles() {
         let state = AppState()
         let file = FileNode(

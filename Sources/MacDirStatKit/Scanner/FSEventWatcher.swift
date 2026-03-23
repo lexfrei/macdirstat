@@ -93,10 +93,9 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     deinit {
-        // queue.sync is unsafe in deinit (potential deadlock if deinit
-        // happens on queue). Direct call is acceptable: at deinit time
-        // no external references exist, so no new work can be enqueued.
-        stopInternal()
+        // Private serial queue — never the main queue, so queue.sync is safe.
+        // Weak self in callbacks means deinit only fires when no external refs remain.
+        queue.sync { stopInternal() }
     }
 }
 
