@@ -8,7 +8,7 @@ struct FileNodeTests {
     @Test func fileHasCorrectSubtreeSize() {
         let node = FileNode(
             name: "test.txt",
-            url: URL(filePath: "/tmp/test.txt"),
+            path: "/tmp/test.txt",
             isDirectory: false,
             fileSize: 1024,
             fileExtension: "txt"
@@ -22,21 +22,21 @@ struct FileNodeTests {
     @Test func directorySubtreeSizeSumsChildren() {
         let child1 = FileNode(
             name: "a.txt",
-            url: URL(filePath: "/tmp/dir/a.txt"),
+            path: "/tmp/dir/a.txt",
             isDirectory: false,
             fileSize: 100,
             fileExtension: "txt"
         )
         let child2 = FileNode(
             name: "b.png",
-            url: URL(filePath: "/tmp/dir/b.png"),
+            path: "/tmp/dir/b.png",
             isDirectory: false,
             fileSize: 200,
             fileExtension: "png"
         )
         let dir = FileNode(
             name: "dir",
-            url: URL(filePath: "/tmp/dir"),
+            path: "/tmp/dir",
             isDirectory: true,
             fileSize: 0,
             children: [child1, child2]
@@ -49,7 +49,7 @@ struct FileNodeTests {
     @Test func emptyDirectoryHasZeroSubtreeSize() {
         let dir = FileNode(
             name: "empty",
-            url: URL(filePath: "/tmp/empty"),
+            path: "/tmp/empty",
             isDirectory: true,
             fileSize: 0,
             children: []
@@ -61,20 +61,20 @@ struct FileNodeTests {
     @Test func nestedDirectoriesAccumulateSize() {
         let file = FileNode(
             name: "deep.txt",
-            url: URL(filePath: "/tmp/a/b/deep.txt"),
+            path: "/tmp/a/b/deep.txt",
             isDirectory: false,
             fileSize: 500
         )
         let innerDir = FileNode(
             name: "b",
-            url: URL(filePath: "/tmp/a/b"),
+            path: "/tmp/a/b",
             isDirectory: true,
             fileSize: 0,
             children: [file]
         )
         let outerDir = FileNode(
             name: "a",
-            url: URL(filePath: "/tmp/a"),
+            path: "/tmp/a",
             isDirectory: true,
             fileSize: 0,
             children: [innerDir]
@@ -84,35 +84,27 @@ struct FileNodeTests {
     }
 
     @Test func hashableByID() {
-        let id = UUID()
-        let node1 = FileNode(
-            id: id,
+        let node = FileNode(
             name: "file.txt",
-            url: URL(filePath: "/tmp/file.txt"),
+            path: "/tmp/file.txt",
             isDirectory: false,
             fileSize: 100
         )
-        let node2 = FileNode(
-            id: id,
-            name: "file.txt",
-            url: URL(filePath: "/tmp/file.txt"),
-            isDirectory: false,
-            fileSize: 100
-        )
-        #expect(node1 == node2)
-        #expect(node1.hashValue == node2.hashValue)
+        // Same object has same hash
+        #expect(node == node)
+        #expect(node.hashValue == node.hashValue)
     }
 
     @Test func differentIDsAreNotEqual() {
         let node1 = FileNode(
             name: "file.txt",
-            url: URL(filePath: "/tmp/file.txt"),
+            path: "/tmp/file.txt",
             isDirectory: false,
             fileSize: 100
         )
         let node2 = FileNode(
             name: "file.txt",
-            url: URL(filePath: "/tmp/file.txt"),
+            path: "/tmp/file.txt",
             isDirectory: false,
             fileSize: 100
         )
@@ -122,7 +114,7 @@ struct FileNodeTests {
     @Test func fileExtensionIsStored() {
         let node = FileNode(
             name: "image.PNG",
-            url: URL(filePath: "/tmp/image.PNG"),
+            path: "/tmp/image.PNG",
             isDirectory: false,
             fileSize: 2048,
             fileExtension: "png"
@@ -133,7 +125,7 @@ struct FileNodeTests {
     @Test func depthIsStored() {
         let node = FileNode(
             name: "deep",
-            url: URL(filePath: "/tmp/a/b/c/deep"),
+            path: "/tmp/a/b/c/deep",
             isDirectory: false,
             fileSize: 100,
             depth: 3
@@ -144,7 +136,7 @@ struct FileNodeTests {
     @Test func directoryWithNilChildrenIsFile() {
         let file = FileNode(
             name: "file",
-            url: URL(filePath: "/tmp/file"),
+            path: "/tmp/file",
             isDirectory: false,
             fileSize: 50
         )

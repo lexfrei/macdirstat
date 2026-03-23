@@ -8,17 +8,17 @@ struct TreemapRendererTests {
     private func makeTree() -> FileNode {
         let children: [FileNode] = [
             FileNode(
-                name: "big.mp4", url: URL(filePath: "/tmp/big.mp4"),
+                name: "big.mp4", path: "/tmp/big.mp4",
                 isDirectory: false, fileSize: 10000, fileExtension: "mp4"),
             FileNode(
-                name: "med.jpg", url: URL(filePath: "/tmp/med.jpg"),
+                name: "med.jpg", path: "/tmp/med.jpg",
                 isDirectory: false, fileSize: 5000, fileExtension: "jpg"),
             FileNode(
-                name: "small.txt", url: URL(filePath: "/tmp/small.txt"),
+                name: "small.txt", path: "/tmp/small.txt",
                 isDirectory: false, fileSize: 1000, fileExtension: "txt"),
         ]
         return FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0, children: children)
     }
 
@@ -37,7 +37,7 @@ struct TreemapRendererTests {
     @Test func computeLayoutReturnsEmptyForLeafNode() {
         let renderer = TreemapRenderer()
         let leaf = FileNode(
-            name: "file.txt", url: URL(filePath: "/tmp/file.txt"),
+            name: "file.txt", path: "/tmp/file.txt",
             isDirectory: false, fileSize: 100)
         let rects = renderer.computeLayout(root: leaf, in: CGRect(x: 0, y: 0, width: 800, height: 600))
         #expect(rects.isEmpty)
@@ -46,7 +46,7 @@ struct TreemapRendererTests {
     @Test func computeLayoutReturnsEmptyForEmptyDir() {
         let renderer = TreemapRenderer()
         let dir = FileNode(
-            name: "empty", url: URL(filePath: "/tmp/empty"),
+            name: "empty", path: "/tmp/empty",
             isDirectory: true, fileSize: 0, children: [])
         let rects = renderer.computeLayout(root: dir, in: CGRect(x: 0, y: 0, width: 800, height: 600))
         #expect(rects.isEmpty)
@@ -55,16 +55,16 @@ struct TreemapRendererTests {
     @Test func computeLayoutRecursesIntoSubdirectories() {
         let renderer = TreemapRenderer(lod: LODController(maximumDepth: 10))
         let innerFile = FileNode(
-            name: "deep.txt", url: URL(filePath: "/tmp/sub/deep.txt"),
+            name: "deep.txt", path: "/tmp/sub/deep.txt",
             isDirectory: false, fileSize: 5000, fileExtension: "txt")
         let subDir = FileNode(
-            name: "sub", url: URL(filePath: "/tmp/sub"),
+            name: "sub", path: "/tmp/sub",
             isDirectory: true, fileSize: 0, children: [innerFile])
         let topFile = FileNode(
-            name: "top.txt", url: URL(filePath: "/tmp/top.txt"),
+            name: "top.txt", path: "/tmp/top.txt",
             isDirectory: false, fileSize: 5000, fileExtension: "txt")
         let root = FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0, children: [subDir, topFile])
 
         let rects = renderer.computeLayout(root: root, in: CGRect(x: 0, y: 0, width: 800, height: 600))
@@ -77,13 +77,13 @@ struct TreemapRendererTests {
     @Test func computeLayoutRespectsLODDepth() {
         let renderer = TreemapRenderer(lod: LODController(minimumRecurseSize: 1000, maximumDepth: 0))
         let innerFile = FileNode(
-            name: "deep.txt", url: URL(filePath: "/tmp/sub/deep.txt"),
+            name: "deep.txt", path: "/tmp/sub/deep.txt",
             isDirectory: false, fileSize: 5000, fileExtension: "txt")
         let subDir = FileNode(
-            name: "sub", url: URL(filePath: "/tmp/sub"),
+            name: "sub", path: "/tmp/sub",
             isDirectory: true, fileSize: 0, children: [innerFile])
         let root = FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0, children: [subDir])
 
         let rects = renderer.computeLayout(root: root, in: CGRect(x: 0, y: 0, width: 800, height: 600))

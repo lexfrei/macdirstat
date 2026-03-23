@@ -15,7 +15,7 @@ public struct TreemapView: View {
         self.renderer = renderer
     }
 
-    private var viewRootID: UUID? {
+    private var viewRootID: Int64? {
         appState.currentViewRoot?.id
     }
 
@@ -90,12 +90,12 @@ public struct TreemapView: View {
                 if let node = appState.selectedNode ?? appState.hoveredNode {
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.selectFile(
-                            node.url.path(percentEncoded: false), inFileViewerRootedAtPath: "")
+                            node.path, inFileViewerRootedAtPath: "")
                     }
                     Button("Copy Path") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(
-                            node.url.path(percentEncoded: false), forType: .string)
+                            node.path, forType: .string)
                     }
                     if node.isDirectory {
                         Divider()

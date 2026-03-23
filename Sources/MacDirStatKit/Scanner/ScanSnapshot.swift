@@ -9,7 +9,7 @@ public struct ScanSnapshot: Codable, Sendable {
 
     public init(from node: FileNode) {
         self.date = Date()
-        self.rootPath = node.url.path(percentEncoded: false)
+        self.rootPath = node.path
         self.totalSize = node.subtreeSize
         self.tree = SnapshotNode(from: node)
         self.fileCount = Self.countFiles(node)
@@ -44,7 +44,7 @@ public struct SnapshotNode: Codable, Sendable {
 
     public init(from node: FileNode) {
         self.name = node.name
-        self.path = node.url.path(percentEncoded: false)
+        self.path = node.path
         self.isDirectory = node.isDirectory
         self.fileSize = node.fileSize
         self.subtreeSize = node.subtreeSize

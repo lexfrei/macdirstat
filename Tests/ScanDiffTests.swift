@@ -9,16 +9,16 @@ struct ScanDiffTests {
         let children = files.map { name, size in
             SnapshotNode(
                 from: FileNode(
-                    name: name, url: URL(filePath: "/tmp/\(name)"),
+                    name: name, path: "/tmp/\(name)",
                     isDirectory: false, fileSize: size,
                     fileExtension: URL(filePath: name).pathExtension.lowercased()))
         }
         return SnapshotNode(
             from: FileNode(
-                name: "root", url: URL(filePath: "/tmp"),
+                name: "root", path: "/tmp",
                 isDirectory: true, fileSize: 0, children: children.map { snap in
                     FileNode(
-                        name: snap.name, url: URL(filePath: snap.path),
+                        name: snap.name, path: snap.path,
                         isDirectory: false, fileSize: snap.fileSize,
                         fileExtension: snap.fileExtension)
                 }))
@@ -78,11 +78,11 @@ struct ScanDiffTests {
 struct ScanSnapshotTests {
     @Test func roundTripsViaSerialization() throws {
         let root = FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0,
             children: [
                 FileNode(
-                    name: "file.txt", url: URL(filePath: "/tmp/file.txt"),
+                    name: "file.txt", path: "/tmp/file.txt",
                     isDirectory: false, fileSize: 1024, fileExtension: "txt")
             ])
 

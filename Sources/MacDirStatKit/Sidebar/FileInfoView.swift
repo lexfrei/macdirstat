@@ -19,7 +19,7 @@ public struct FileInfoView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text(node.url.path(percentEncoded: false))
+                Text(node.path)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

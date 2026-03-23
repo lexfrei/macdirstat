@@ -77,7 +77,7 @@ public struct FileManagerScanner: FileSystemScanning {
         else {
             state.incrementSkipped()
             return FileNode(
-                name: URL(filePath: path).lastPathComponent, url: URL(filePath: path),
+                name: Self.lastName(from: path), path: path,
                 isDirectory: true, fileSize: 0, children: [], depth: depth)
         }
         defer { fts_close(fts) }
@@ -91,7 +91,7 @@ public struct FileManagerScanner: FileSystemScanning {
 
             let info = entry.pointee.fts_info
             let entryPath = String(cString: entry.pointee.fts_path)
-            let entryName = URL(filePath: entryPath).lastPathComponent
+            let entryName = Self.lastName(from: entryPath)
             let stat = entry.pointee.fts_statp.pointee
 
             // Skip APFS system volume files (very large inodes)
@@ -127,7 +127,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 sorted.sort { $0.subtreeSize > $1.subtreeSize }
                 let dirNode = FileNode(
                     name: entryName,
-                    url: URL(filePath: entryPath),
+                    path: entryPath,
                     isDirectory: true,
                     fileSize: 0,
                     children: sorted,
@@ -140,13 +140,12 @@ public struct FileManagerScanner: FileSystemScanning {
                 }
 
             case FTS_F:
-                // Regular file
-                let size = Int64(stat.st_blocks) * 512  // Physical blocks * block size
-                let url = URL(filePath: entryPath)
-                let ext = fileExtension(from: entryName)
+                // Regular file — physical size via st_blocks
+                let size = Int64(stat.st_blocks) * 512
+                let ext = Self.fileExtension(from: entryName)
                 let node = FileNode(
                     name: entryName,
-                    url: url,
+                    path: entryPath,
                     isDirectory: false,
                     fileSize: size,
                     fileExtension: ext,
@@ -177,12 +176,19 @@ public struct FileManagerScanner: FileSystemScanning {
         }
 
         return rootNode ?? FileNode(
-            name: URL(filePath: path).lastPathComponent,
-            url: URL(filePath: path),
+            name: Self.lastName(from: path), path: path,
             isDirectory: true, fileSize: 0, children: [], depth: depth)
     }
 
-    private func fileExtension(from name: String) -> String {
+    /// Extract last path component without creating a URL.
+    static func lastName(from path: String) -> String {
+        guard let slashIdx = path.lastIndex(of: "/") else { return path }
+        let afterSlash = path.index(after: slashIdx)
+        guard afterSlash < path.endIndex else { return path }
+        return String(path[afterSlash...])
+    }
+
+    static func fileExtension(from name: String) -> String {
         guard let dotIndex = name.lastIndex(of: "."),
             dotIndex != name.startIndex,
             name.index(after: dotIndex) != name.endIndex

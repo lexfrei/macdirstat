@@ -8,20 +8,20 @@ struct ColorMapperTests {
     private func makeTree() -> FileNode {
         let children: [FileNode] = [
             FileNode(
-                name: "big.mp4", url: URL(filePath: "/tmp/big.mp4"),
+                name: "big.mp4", path: "/tmp/big.mp4",
                 isDirectory: false, fileSize: 10000, fileExtension: "mp4"),
             FileNode(
-                name: "med.jpg", url: URL(filePath: "/tmp/med.jpg"),
+                name: "med.jpg", path: "/tmp/med.jpg",
                 isDirectory: false, fileSize: 5000, fileExtension: "jpg"),
             FileNode(
-                name: "small.txt", url: URL(filePath: "/tmp/small.txt"),
+                name: "small.txt", path: "/tmp/small.txt",
                 isDirectory: false, fileSize: 1000, fileExtension: "txt"),
             FileNode(
-                name: "noext", url: URL(filePath: "/tmp/noext"),
+                name: "noext", path: "/tmp/noext",
                 isDirectory: false, fileSize: 500, fileExtension: ""),
         ]
         return FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0, children: children)
     }
 

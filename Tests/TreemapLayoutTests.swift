@@ -10,7 +10,7 @@ struct TreemapLayoutTests {
 
     private func makeNode(_ name: String, size: Int64) -> FileNode {
         FileNode(
-            name: name, url: URL(filePath: "/tmp/\(name)"),
+            name: name, path: "/tmp/\(name)",
             isDirectory: false, fileSize: size, fileExtension: "txt")
     }
 

@@ -44,7 +44,7 @@ struct AppStateTests {
     @Test @MainActor func drillDownPushesToStack() {
         let state = AppState()
         let dir = FileNode(
-            name: "dir", url: URL(filePath: "/tmp/dir"),
+            name: "dir", path: "/tmp/dir",
             isDirectory: true, fileSize: 0, children: [])
         state.rootNode = dir
         state.drillDown(into: dir)
@@ -64,7 +64,7 @@ struct AppStateTests {
     @Test @MainActor func drillDownIgnoresFiles() {
         let state = AppState()
         let file = FileNode(
-            name: "file", url: URL(filePath: "/tmp/file"),
+            name: "file", path: "/tmp/file",
             isDirectory: false, fileSize: 100)
         state.drillDown(into: file)
         #expect(state.navigationStack.isEmpty)
@@ -73,7 +73,7 @@ struct AppStateTests {
     @Test @MainActor func navigateUpPopsStack() {
         let state = AppState()
         let dir = FileNode(
-            name: "dir", url: URL(filePath: "/tmp/dir"),
+            name: "dir", path: "/tmp/dir",
             isDirectory: true, fileSize: 0, children: [])
         state.rootNode = dir
         state.drillDown(into: dir)
@@ -91,10 +91,10 @@ struct AppStateTests {
     @Test @MainActor func navigateToIndex() {
         let state = AppState()
         let dir1 = FileNode(
-            name: "a", url: URL(filePath: "/tmp/a"),
+            name: "a", path: "/tmp/a",
             isDirectory: true, fileSize: 0, children: [])
         let dir2 = FileNode(
-            name: "b", url: URL(filePath: "/tmp/a/b"),
+            name: "b", path: "/tmp/a/b",
             isDirectory: true, fileSize: 0, children: [])
         state.drillDown(into: dir1)
         state.drillDown(into: dir2)
@@ -108,7 +108,7 @@ struct AppStateTests {
     @Test @MainActor func navigateToNegativeIndexClearsStack() {
         let state = AppState()
         let dir = FileNode(
-            name: "dir", url: URL(filePath: "/tmp/dir"),
+            name: "dir", path: "/tmp/dir",
             isDirectory: true, fileSize: 0, children: [])
         state.drillDown(into: dir)
         state.navigateTo(index: -1)
@@ -118,7 +118,7 @@ struct AppStateTests {
     @Test @MainActor func navigateToOutOfRangeIsNoop() {
         let state = AppState()
         let dir = FileNode(
-            name: "dir", url: URL(filePath: "/tmp/dir"),
+            name: "dir", path: "/tmp/dir",
             isDirectory: true, fileSize: 0, children: [])
         state.drillDown(into: dir)
         state.navigateTo(index: 5)
@@ -128,7 +128,7 @@ struct AppStateTests {
     @Test @MainActor func currentViewRootFallsBackToRootNode() {
         let state = AppState()
         let root = FileNode(
-            name: "root", url: URL(filePath: "/tmp"),
+            name: "root", path: "/tmp",
             isDirectory: true, fileSize: 0, children: [])
         state.rootNode = root
         #expect(state.currentViewRoot?.id == root.id)
@@ -139,7 +139,7 @@ struct AppStateTests {
     @Test @MainActor func requestDeleteSetsState() {
         let state = AppState()
         let file = FileNode(
-            name: "file", url: URL(filePath: "/tmp/file"),
+            name: "file", path: "/tmp/file",
             isDirectory: false, fileSize: 100)
         state.requestDelete(nodes: [file])
         #expect(state.showDeleteConfirmation == true)
@@ -149,7 +149,7 @@ struct AppStateTests {
     @Test @MainActor func cancelDeleteResetsState() {
         let state = AppState()
         let file = FileNode(
-            name: "file", url: URL(filePath: "/tmp/file"),
+            name: "file", path: "/tmp/file",
             isDirectory: false, fileSize: 100)
         state.requestDelete(nodes: [file])
         state.cancelDelete()
@@ -167,10 +167,10 @@ struct AppStateTests {
     @Test @MainActor func drillDownClearsSelection() {
         let state = AppState()
         let file = FileNode(
-            name: "file", url: URL(filePath: "/tmp/file"),
+            name: "file", path: "/tmp/file",
             isDirectory: false, fileSize: 100)
         let dir = FileNode(
-            name: "dir", url: URL(filePath: "/tmp/dir"),
+            name: "dir", path: "/tmp/dir",
             isDirectory: true, fileSize: 0, children: [])
         state.selectedNode = file
         state.drillDown(into: dir)
