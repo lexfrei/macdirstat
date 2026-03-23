@@ -24,7 +24,12 @@ public struct FileManagerScanner: FileSystemScanning {
         progressHandler: @escaping @MainActor @Sendable (Int, Int, String, Int) -> Void
     ) async throws -> FileNode {
         let path = url.path(percentEncoded: false)
-        let estimatedTotal = Self.estimatedItemCount(at: path)
+        // On APFS, "/" is the system volume (small, read-only).
+        // Actual user data lives on the data volume at /System/Volumes/Data.
+        // Use the data volume for inode estimate when scanning root.
+        let statPath = (path == "/" || path == "")
+            ? "/System/Volumes/Data" : path
+        let estimatedTotal = Self.estimatedItemCount(at: statPath)
 
         // Get root device to stay on same filesystem
         let rootDevice: dev_t = try {

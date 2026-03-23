@@ -68,9 +68,10 @@ public final class AppState {
             securityScopedURL = url
         }
 
-        // Pre-trigger TCC dialogs in background to avoid blocking UI
-        let scanPath = url.path(percentEncoded: false)
-        Task.detached { Permissions.preTriggerIfNeeded(scanPath: scanPath) }
+        // Pre-trigger TCC dialogs BEFORE scan starts.
+        // Must be synchronous so dialogs appear before scanner hits protected dirs.
+        // isReadableFile is lightweight (stat only), won't block UI significantly.
+        Permissions.preTriggerIfNeeded(scanPath: url.path(percentEncoded: false))
 
         runScan(url: url, releaseSecurityScope: true)
     }
