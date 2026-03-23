@@ -5,6 +5,8 @@ public protocol FileSystemWatching: Sendable {
     func stop()
 }
 
+/// FSEvents-based filesystem watcher.
+/// IMPORTANT: Always call `stop()` before releasing the last reference.
 public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "la.lex.macdirstat.fswatcher")
@@ -12,7 +14,6 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     private var handler: (@Sendable ([String]) -> Void)?
     private var pendingPaths: Set<String> = []
     private var debounceWork: DispatchWorkItem?
-    private var retainedSelf: Unmanaged<FSEventWatcher>?
 
     public init(debounceInterval: TimeInterval = 0.5) {
         self.debounceInterval = debounceInterval
@@ -24,30 +25,33 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
             self.handler = handler
         }
 
-        // Retain self so deinit cannot happen while stream is active
-        let retained = Unmanaged.passRetained(self)
+        // Use a separate context object to avoid retaining self in the callback
+        let context = WatcherContext()
 
-        var context = FSEventStreamContext()
-        context.info = retained.toOpaque()
+        var fsContext = FSEventStreamContext()
+        fsContext.info = Unmanaged.passRetained(context).toOpaque()
 
         let callback: FSEventStreamCallback = {
             _, clientInfo, numEvents, eventPaths, _, _ in
             guard let clientInfo = clientInfo else { return }
-            let watcher = Unmanaged<FSEventWatcher>.fromOpaque(clientInfo).takeUnretainedValue()
+            let ctx = Unmanaged<WatcherContext>.fromOpaque(clientInfo).takeUnretainedValue()
             let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue()
                 as! [String]
-            watcher.handleEvents(paths: Array(paths.prefix(numEvents)))
+            ctx.onEvent?(Array(paths.prefix(numEvents)))
         }
 
         let pathsToWatch = paths as CFArray
         let newStream = FSEventStreamCreate(
-            nil, callback, &context, pathsToWatch,
+            nil, callback, &fsContext, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.1,
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents))
 
         queue.sync {
-            self.retainedSelf = retained
+            // Wire context to self (weak to avoid retain cycle)
+            context.onEvent = { [weak self] paths in
+                self?.handleEvents(paths: paths)
+            }
             self.stream = newStream
             if let stream = newStream {
                 FSEventStreamSetDispatchQueue(stream, self.queue)
@@ -57,7 +61,7 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     }
 
     private func handleEvents(paths: [String]) {
-        // Already on self.queue (set via FSEventStreamSetDispatchQueue)
+        // Already on self.queue
         pendingPaths.formUnion(paths)
         debounceWork?.cancel()
 
@@ -86,17 +90,19 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
         debounceWork?.cancel()
         debounceWork = nil
         pendingPaths.removeAll()
-
-        // Release the retained self — balances passRetained in start()
-        retainedSelf?.release()
-        retainedSelf = nil
     }
 
     deinit {
-        // At this point no callbacks can fire because either:
-        // - stop() was called (released retainedSelf, stream invalidated)
-        // - start() was never called (no stream exists)
-        // Direct call is safe since no concurrent access is possible.
+        // stop() must be called before deinit. Since we use weak self in the
+        // callback context, there's no retain cycle — deinit will be called
+        // when all external references are released. We clean up the stream
+        // here as a safety net.
         stopInternal()
     }
+}
+
+/// Separate context object passed to FSEvents callback.
+/// Uses weak reference to watcher via closure to avoid retain cycles.
+private final class WatcherContext {
+    var onEvent: (([String]) -> Void)?
 }

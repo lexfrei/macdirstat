@@ -45,8 +45,9 @@ public struct FileManagerScanner: FileSystemScanning {
             state: state, estimatedTotal: estimatedTotal,
             progressIntervalNs: intervalNs, progressHandler: progressHandler)
 
+        let finalSnap = state.snapshot()
         await MainActor.run {
-            progressHandler(state.itemCount, estimatedTotal, "", state.skippedDirs)
+            progressHandler(finalSnap.itemCount, estimatedTotal, "", finalSnap.skippedDirs)
         }
         return root
     }
@@ -69,7 +70,7 @@ public struct FileManagerScanner: FileSystemScanning {
                 return fts_open(&paths, FTS_PHYSICAL | FTS_NOCHDIR | FTS_XDEV, nil)
             })
         else {
-            state.skippedDirs += 1
+            state.incrementSkipped()
             return FileNode(
                 name: URL(filePath: path).lastPathComponent, url: URL(filePath: path),
                 isDirectory: true, fileSize: 0, children: [], depth: depth)
@@ -97,7 +98,7 @@ public struct FileManagerScanner: FileSystemScanning {
             // Skip different devices (shouldn't happen with FTS_XDEV, but safety)
             if stat.st_dev != rootDevice {
                 if info == FTS_D { fts_set(fts, entry, FTS_SKIP) }
-                state.skippedDirs += 1
+                state.incrementSkipped()
                 continue
             }
 
@@ -149,25 +150,23 @@ public struct FileManagerScanner: FileSystemScanning {
                     dirStack[dirStack.count - 1].children.append(node)
                 }
 
-                state.itemCount += 1
+                state.incrementItems()
 
             case FTS_DNR, FTS_ERR:
                 // Cannot read directory or error
-                state.skippedDirs += 1
+                state.incrementSkipped()
 
             default:
                 break
             }
 
-            // Time-based progress reporting
+            // Time-based progress reporting (atomic check + update)
             let now = DispatchTime.now().uptimeNanoseconds
-            if now - state.lastProgressTime >= progressIntervalNs {
-                state.lastProgressTime = now
-                let count = state.itemCount
-                let skipped = state.skippedDirs
+            if state.shouldReportProgress(now: now, interval: progressIntervalNs) {
+                let snap = state.snapshot()
                 let total = estimatedTotal
                 let name = entryName
-                await MainActor.run { progressHandler(count, total, name, skipped) }
+                await MainActor.run { progressHandler(snap.itemCount, total, name, snap.skippedDirs) }
             }
         }
 
@@ -204,24 +203,32 @@ public enum ScanError: Error, LocalizedError {
     }
 }
 
+/// Thread-safe scan state. All mutations go through the lock as compound operations.
 private final class ScanState: @unchecked Sendable {
     private let lock = NSLock()
     private var _itemCount: Int = 0
     private var _skippedDirs: Int = 0
     private var _lastProgressTime: UInt64 = 0
 
-    var itemCount: Int {
-        get { lock.withLock { _itemCount } }
-        set { lock.withLock { _itemCount = newValue } }
+    var itemCount: Int { lock.withLock { _itemCount } }
+    var skippedDirs: Int { lock.withLock { _skippedDirs } }
+    var lastProgressTime: UInt64 { lock.withLock { _lastProgressTime } }
+
+    func incrementItems() { lock.withLock { _itemCount += 1 } }
+    func incrementSkipped() { lock.withLock { _skippedDirs += 1 } }
+
+    /// Check and update progress time atomically. Returns true if enough time passed.
+    func shouldReportProgress(now: UInt64, interval: UInt64) -> Bool {
+        lock.withLock {
+            if now - _lastProgressTime >= interval {
+                _lastProgressTime = now
+                return true
+            }
+            return false
+        }
     }
 
-    var skippedDirs: Int {
-        get { lock.withLock { _skippedDirs } }
-        set { lock.withLock { _skippedDirs = newValue } }
-    }
-
-    var lastProgressTime: UInt64 {
-        get { lock.withLock { _lastProgressTime } }
-        set { lock.withLock { _lastProgressTime = newValue } }
+    func snapshot() -> (itemCount: Int, skippedDirs: Int) {
+        lock.withLock { (_itemCount, _skippedDirs) }
     }
 }

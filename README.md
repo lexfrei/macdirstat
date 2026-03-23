@@ -13,12 +13,12 @@ Native macOS disk usage visualizer with squarified treemap. Scans directories an
 - Directory tree sidebar with file sizes
 - Extension legend with color indicators
 - Real-time filesystem watching (FSEvents)
-- Scan snapshots and comparison (diff added/removed/changed)
+- Scan snapshots and diff engine (library-level, UI planned)
 - File deletion (Move to Trash with confirmation)
 - Multi-tab scanning with volume discovery
 - Context menu: Reveal in Finder, Copy Path
 - Stays on same volume (skips network mounts and external drives)
-- Correct iCloud handling (shows physical on-disk size)
+- Physical on-disk size (iCloud-evicted files show as 0 bytes — they occupy no local disk space)
 
 ## Requirements
 

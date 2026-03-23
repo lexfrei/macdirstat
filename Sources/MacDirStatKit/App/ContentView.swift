@@ -24,12 +24,6 @@ public struct ContentView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Open", systemImage: "folder") {
-                    appState.isPickerPresented = true
-                }
-                .disabled(appState.scanProgress.isScanning)
-            }
             ToolbarItem(placement: .automatic) {
                 Button {
                     appState.toggleLiveWatching()

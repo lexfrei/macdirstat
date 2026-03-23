@@ -125,6 +125,36 @@ struct AppStateTests {
         #expect(state.currentViewRoot?.id == root.id)
     }
 
+    // MARK: - Delete Flow
+
+    @Test @MainActor func requestDeleteSetsState() {
+        let state = AppState()
+        let file = FileNode(
+            name: "file", url: URL(filePath: "/tmp/file"),
+            isDirectory: false, fileSize: 100)
+        state.requestDelete(nodes: [file])
+        #expect(state.showDeleteConfirmation == true)
+        #expect(state.nodesToDelete.count == 1)
+    }
+
+    @Test @MainActor func cancelDeleteResetsState() {
+        let state = AppState()
+        let file = FileNode(
+            name: "file", url: URL(filePath: "/tmp/file"),
+            isDirectory: false, fileSize: 100)
+        state.requestDelete(nodes: [file])
+        state.cancelDelete()
+        #expect(state.showDeleteConfirmation == false)
+        #expect(state.nodesToDelete.isEmpty)
+    }
+
+    @Test @MainActor func startScanStopsLiveWatching() {
+        let state = AppState()
+        state.isLiveWatching = true
+        state.startScan(url: URL(filePath: "/tmp"))
+        #expect(state.isLiveWatching == false)
+    }
+
     @Test @MainActor func drillDownClearsSelection() {
         let state = AppState()
         let file = FileNode(

@@ -54,8 +54,8 @@ public final class AppState {
             securityScopedURL = url
         }
 
-        // Pre-trigger TCC dialogs so they appear before scan, not mid-scan
-        Permissions.preTriggerPermissions()
+        // Pre-trigger TCC dialogs for protected dirs under scan path
+        Permissions.preTriggerIfNeeded(scanPath: url.path(percentEncoded: false))
 
         runScan(url: url, releaseSecurityScope: true)
     }
@@ -73,24 +73,26 @@ public final class AppState {
 
     public func confirmDelete() {
         scanTask?.cancel()
-        let fm = FileManager.default
-        var trashed: [String] = []
-        for node in nodesToDelete {
-            do {
-                try fm.trashItem(at: node.url, resultingItemURL: nil)
-                trashed.append(node.name)
-            } catch {
-                let remaining = nodesToDelete.count - trashed.count
-                scanError =
-                    "Failed to trash \(node.name): \(error.localizedDescription). \(remaining) item(s) not processed."
-                break
-            }
-        }
+        let nodes = nodesToDelete
         nodesToDelete = []
         showDeleteConfirmation = false
 
-        if let url = selectedURL {
-            rescan(url: url)
+        Task.detached {
+            let fm = FileManager.default
+            var errorMsg: String?
+            for node in nodes {
+                do {
+                    try fm.trashItem(at: node.url, resultingItemURL: nil)
+                } catch {
+                    errorMsg =
+                        "Failed to trash \(node.name): \(error.localizedDescription)"
+                    break
+                }
+            }
+            await MainActor.run {
+                if let msg = errorMsg { self.scanError = msg }
+                if let url = self.selectedURL { self.rescan(url: url) }
+            }
         }
     }
 
