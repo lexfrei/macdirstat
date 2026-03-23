@@ -45,10 +45,15 @@ public struct ContentView: View {
             Divider()
 
             Section {
-                Text("No data")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
+                if let root = appState.rootNode {
+                    ExtensionLegendView(
+                        entries: appState.colorMapper.legend(for: root))
+                } else {
+                    Text("No data")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                }
             } header: {
                 Text("Legend")
                     .font(.headline)
@@ -82,9 +87,7 @@ public struct ContentView: View {
             } else if let error = appState.scanError {
                 errorView(error)
             } else if appState.rootNode != nil {
-                Text("Treemap placeholder")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+                TreemapView(appState: appState, renderer: TreemapRenderer(colorMapper: appState.colorMapper))
             } else {
                 emptyState
             }
