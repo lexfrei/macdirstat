@@ -1,0 +1,2 @@
+# Ensure GitHub linguist correctly identifies the project language
+*.swift linguist-language=Swift

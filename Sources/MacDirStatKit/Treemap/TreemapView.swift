@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 public struct TreemapView: View {
@@ -48,6 +49,25 @@ public struct TreemapView: View {
             .onKeyPress(.escape) {
                 appState.selectedNode = nil
                 return .handled
+            }
+            .contextMenu {
+                if let node = appState.selectedNode ?? appState.hoveredNode {
+                    Button("Reveal in Finder") {
+                        NSWorkspace.shared.selectFile(
+                            node.url.path(percentEncoded: false), inFileViewerRootedAtPath: "")
+                    }
+                    Button("Copy Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(
+                            node.url.path(percentEncoded: false), forType: .string)
+                    }
+                    if node.isDirectory {
+                        Divider()
+                        Button("Open Here") {
+                            appState.drillDown(into: node)
+                        }
+                    }
+                }
             }
             .focusable()
             .onChange(of: geometry.size) { _, newSize in

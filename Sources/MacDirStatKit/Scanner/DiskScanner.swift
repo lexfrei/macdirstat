@@ -20,6 +20,7 @@ public struct FileManagerScanner: FileSystemScanning {
     ) async throws -> FileNode {
         let resourceKeys: Set<URLResourceKey> = [
             .fileSizeKey, .isDirectoryKey, .totalFileAllocatedSizeKey,
+            .isSymbolicLinkKey,
         ]
         var fileCount = 0
         var skippedDirs = 0
@@ -63,6 +64,10 @@ public struct FileManagerScanner: FileSystemScanning {
             do {
                 resourceValues = try childURL.resourceValues(forKeys: resourceKeys)
             } catch {
+                continue
+            }
+
+            if resourceValues.isSymbolicLink == true {
                 continue
             }
 
