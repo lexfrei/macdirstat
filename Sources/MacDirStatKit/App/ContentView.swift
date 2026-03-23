@@ -79,6 +79,8 @@ public struct ContentView: View {
         VStack {
             if appState.scanProgress.isScanning {
                 scanProgressView
+            } else if let error = appState.scanError {
+                errorView(error)
             } else if appState.rootNode != nil {
                 Text("Treemap placeholder")
                     .font(.title2)
@@ -110,6 +112,23 @@ public struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .monospacedDigit()
+            Spacer()
+        }
+    }
+
+    private func errorView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.orange)
+            Text("Scan Failed")
+                .font(.title2)
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 400)
             Spacer()
         }
     }

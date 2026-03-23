@@ -1,6 +1,8 @@
 # MacDirStat
 
-Native macOS disk usage visualizer with squarified treemap. Each file is a rectangle with area proportional to its size, colored by file extension.
+Native macOS disk usage visualizer. Scans directories and displays file sizes in a tree view with plans for squarified treemap visualization.
+
+**Status**: Work in progress. Currently supports directory scanning with a tree view sidebar.
 
 ## Requirements
 
