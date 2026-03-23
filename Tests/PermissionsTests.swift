@@ -1,12 +1,10 @@
+import SwiftUI
 import Testing
 
 @testable import MacDirStatKit
 
 @Suite("Permissions")
 struct PermissionsTests {
-    // Note: We can't mock FileManager in Permissions directly,
-    // but we can verify the path matching logic by testing AppState.isVolumeRoot
-
     @Test @MainActor func rootIsVolumeRoot() {
         #expect(AppState.isVolumeRoot(path: "/") == true)
     }
@@ -17,5 +15,45 @@ struct PermissionsTests {
 
     @Test @MainActor func tmpIsNotVolumeRoot() {
         #expect(AppState.isVolumeRoot(path: "/tmp") == false)
+    }
+}
+
+@Suite("FileNode.optionalChildren")
+struct OptionalChildrenTests {
+    @Test func fileHasNilOptionalChildren() {
+        let file = FileNode(
+            name: "file.txt", url: URL(filePath: "/tmp/file.txt"),
+            isDirectory: false, fileSize: 100)
+        #expect(file.optionalChildren == nil)
+    }
+
+    @Test func emptyDirHasNilOptionalChildren() {
+        let dir = FileNode(
+            name: "empty", url: URL(filePath: "/tmp/empty"),
+            isDirectory: true, fileSize: 0, children: [])
+        #expect(dir.optionalChildren == nil)
+    }
+
+    @Test func dirWithChildrenHasOptionalChildren() {
+        let child = FileNode(
+            name: "a.txt", url: URL(filePath: "/tmp/dir/a.txt"),
+            isDirectory: false, fileSize: 100)
+        let dir = FileNode(
+            name: "dir", url: URL(filePath: "/tmp/dir"),
+            isDirectory: true, fileSize: 0, children: [child])
+        #expect(dir.optionalChildren?.count == 1)
+    }
+}
+
+@Suite("VolumeInfo")
+struct VolumeInfoTests {
+    @Test func usedCapacityIsCorrect() {
+        let vol = VolumeInfo(
+            id: URL(filePath: "/"),
+            name: "Test",
+            url: URL(filePath: "/"),
+            totalCapacity: 1000,
+            availableCapacity: 400)
+        #expect(vol.usedCapacity == 600)
     }
 }

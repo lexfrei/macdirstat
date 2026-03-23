@@ -17,9 +17,13 @@ public enum Permissions {
 
         for relPath in protectedRelPaths {
             let fullPath = (home as NSString).appendingPathComponent(relPath)
-            // Trigger if scan path contains the protected dir, or is inside it
-            guard fullPath.hasPrefix(scanPath) || scanPath.hasPrefix(fullPath)
-                || scanPath == "/"
+            // Trigger if scan path contains the protected dir, or is inside it.
+            // Append "/" to prevent prefix matching on partial directory names
+            // (e.g. /Users/le matching /Users/lex/Desktop).
+            let scanPrefix = scanPath.hasSuffix("/") ? scanPath : scanPath + "/"
+            let fullPrefix = fullPath.hasSuffix("/") ? fullPath : fullPath + "/"
+            guard fullPath.hasPrefix(scanPrefix) || fullPath == scanPath
+                || scanPath.hasPrefix(fullPrefix) || scanPath == "/"
             else { continue }
             // isReadableFile triggers TCC dialog if needed (lightweight stat)
             _ = fm.isReadableFile(atPath: fullPath)

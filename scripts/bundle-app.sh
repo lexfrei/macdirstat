@@ -50,6 +50,8 @@ cat > "${APP_DIR}/Contents/Info.plist" << PLIST
     <string>MacDirStat needs access to scan your Documents folder.</string>
     <key>NSDownloadsFolderUsageDescription</key>
     <string>MacDirStat needs access to scan your Downloads folder.</string>
+    <key>NSFullDiskAccessUsageDescription</key>
+    <string>MacDirStat needs Full Disk Access to scan all files and folders on your disk.</string>
 </dict>
 </plist>
 PLIST

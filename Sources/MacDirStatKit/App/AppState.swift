@@ -187,7 +187,9 @@ public final class AppState {
                 self.colorMapper = self.colorMapper.withMapping(from: node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
-                // Scan cancelled
+                // Scan cancelled — do NOT set isScanning=false here,
+                // because a new scan may have already set it to true.
+                return
             } catch {
                 self?.scanError = error.localizedDescription
             }
