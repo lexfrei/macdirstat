@@ -12,6 +12,7 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
     private var handler: (@Sendable ([String]) -> Void)?
     private var pendingPaths: Set<String> = []
     private var debounceWork: DispatchWorkItem?
+    private var retainedSelf: Unmanaged<FSEventWatcher>?
 
     public init(debounceInterval: TimeInterval = 0.5) {
         self.debounceInterval = debounceInterval
@@ -23,8 +24,11 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
             self.handler = handler
         }
 
+        // Retain self so deinit cannot happen while stream is active
+        let retained = Unmanaged.passRetained(self)
+
         var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
+        context.info = retained.toOpaque()
 
         let callback: FSEventStreamCallback = {
             _, clientInfo, numEvents, eventPaths, _, _ in
@@ -39,10 +43,11 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
         let newStream = FSEventStreamCreate(
             nil, callback, &context, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.1,  // Low FSEvents latency; debouncing is handled in handleEvents
+            0.1,
             UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents))
 
         queue.sync {
+            self.retainedSelf = retained
             self.stream = newStream
             if let stream = newStream {
                 FSEventStreamSetDispatchQueue(stream, self.queue)
@@ -81,11 +86,17 @@ public final class FSEventWatcher: FileSystemWatching, @unchecked Sendable {
         debounceWork?.cancel()
         debounceWork = nil
         pendingPaths.removeAll()
+
+        // Release the retained self — balances passRetained in start()
+        retainedSelf?.release()
+        retainedSelf = nil
     }
 
     deinit {
-        // Safe: deinit means no other references exist, so no concurrent access
-        // FSEventStream must be stopped before deallocation
+        // At this point no callbacks can fire because either:
+        // - stop() was called (released retainedSelf, stream invalidated)
+        // - start() was never called (no stream exists)
+        // Direct call is safe since no concurrent access is possible.
         stopInternal()
     }
 }

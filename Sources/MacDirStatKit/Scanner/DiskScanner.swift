@@ -158,7 +158,23 @@ public struct FileManagerScanner: FileSystemScanning {
 }
 
 private final class ScanState: @unchecked Sendable {
-    var itemCount: Int = 0
-    var skippedDirs: Int = 0
-    var lastProgressTime: UInt64 = 0
+    private let lock = NSLock()
+    private var _itemCount: Int = 0
+    private var _skippedDirs: Int = 0
+    private var _lastProgressTime: UInt64 = 0
+
+    var itemCount: Int {
+        get { lock.withLock { _itemCount } }
+        set { lock.withLock { _itemCount = newValue } }
+    }
+
+    var skippedDirs: Int {
+        get { lock.withLock { _skippedDirs } }
+        set { lock.withLock { _skippedDirs = newValue } }
+    }
+
+    var lastProgressTime: UInt64 {
+        get { lock.withLock { _lastProgressTime } }
+        set { lock.withLock { _lastProgressTime = newValue } }
+    }
 }

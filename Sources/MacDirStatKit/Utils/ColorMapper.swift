@@ -98,7 +98,7 @@ public struct GoldenAngleColorMapper: Sendable {
                 accumulateSizes(child, into: &sizes)
             }
         } else {
-            sizes[node.fileExtension, default: 0] += node.fileSize
+            sizes[node.fileExtension, default: 0] += node.subtreeSize
         }
     }
 }

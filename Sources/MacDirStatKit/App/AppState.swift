@@ -54,29 +54,7 @@ public final class AppState {
             securityScopedURL = url
         }
 
-        let scanner = self.scanner
-        let startTime = Date()
-
-        scanTask = Task {
-            do {
-                let node = try await scanner.scan(url: url) { count, total, path, skipped in
-                    self.scanProgress.filesScanned = count
-                    self.scanProgress.totalEstimatedItems = total
-                    self.scanProgress.currentPath = path
-                    self.scanProgress.skippedDirectories = skipped
-                    self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
-                }
-                self.rootNode = node
-                self.colorMapper = self.colorMapper.withMapping(from: node)
-                self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
-            } catch is CancellationError {
-                // Scan was cancelled
-            } catch {
-                self.scanError = error.localizedDescription
-            }
-            self.scanProgress.isScanning = false
-            self.stopSecurityScopedAccess()
-        }
+        runScan(url: url, releaseSecurityScope: true)
     }
 
     public func drillDown(into node: FileNode) {
@@ -93,11 +71,15 @@ public final class AppState {
     public func confirmDelete() {
         scanTask?.cancel()
         let fm = FileManager.default
+        var trashed: [String] = []
         for node in nodesToDelete {
             do {
                 try fm.trashItem(at: node.url, resultingItemURL: nil)
+                trashed.append(node.name)
             } catch {
-                scanError = "Failed to trash \(node.name): \(error.localizedDescription)"
+                let remaining = nodesToDelete.count - trashed.count
+                scanError =
+                    "Failed to trash \(node.name): \(error.localizedDescription). \(remaining) item(s) not processed."
                 break
             }
         }
@@ -163,6 +145,10 @@ public final class AppState {
         scanTask?.cancel()
         scanProgress.reset()
         scanProgress.isScanning = true
+        runScan(url: url, releaseSecurityScope: false)
+    }
+
+    private func runScan(url: URL, releaseSecurityScope: Bool) {
         let scanner = self.scanner
         let startTime = Date()
 
@@ -179,11 +165,14 @@ public final class AppState {
                 self.colorMapper = self.colorMapper.withMapping(from: node)
                 self.scanProgress.elapsedTime = Date().timeIntervalSince(startTime)
             } catch is CancellationError {
-                // Rescan cancelled
+                // Scan cancelled
             } catch {
-                self.scanError = "Rescan failed: \(error.localizedDescription)"
+                self.scanError = error.localizedDescription
             }
             self.scanProgress.isScanning = false
+            if releaseSecurityScope {
+                self.stopSecurityScopedAccess()
+            }
         }
     }
 

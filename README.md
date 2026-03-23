@@ -41,6 +41,8 @@ Create a standalone .app bundle:
 open MacDirStat.app
 ```
 
+Note: use `make test` instead of bare `swift test` — the Swift Testing framework in Command Line Tools requires explicit framework search paths provided by the Makefile.
+
 ## License
 
 BSD-3-Clause
